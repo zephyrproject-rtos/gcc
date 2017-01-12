@@ -43,6 +43,9 @@
   (UNSPEC_TLS           106)    ;; jump table
   (UNSPEC_SET_TEXT      107)    ;; set text start
   (UNSPEC_TEXT          108)    ;; data text relative
+  (UNSPECV_CAS_BOOL     201)    ;; compare and swap (bool)
+  (UNSPECV_CAS_VAL      202)    ;; compare and swap (val)
+  (UNSPECV_CAS_MEM      203)    ;; compare and swap (mem)
 ])
 
 (define_c_enum "unspec" [
