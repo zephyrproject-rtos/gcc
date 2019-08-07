@@ -16,13 +16,17 @@ rv64gc ilp32 \
 ilp32f \
 lp64 \
 lp64d
+MULTILIB_OPTIONS += mcmodel=medany
+MULTILIB_DIRNAMES += medany
 MULTILIB_REQUIRED = march=rv32i/mabi=ilp32 \
 march=rv32im/mabi=ilp32 \
 march=rv32iac/mabi=ilp32 \
 march=rv32imac/mabi=ilp32 \
 march=rv32imafc/mabi=ilp32f \
 march=rv64imac/mabi=lp64 \
-march=rv64imafdc/mabi=lp64d
+march=rv64imac/mabi=lp64/mcmodel=medany \
+march=rv64imafdc/mabi=lp64d \
+march=rv64imafdc/mabi=lp64d/mcmodel=medany
 MULTILIB_REUSE = march.rv32i/mabi.ilp32=march.rv32ic/mabi.ilp32 \
 march.rv32im/mabi.ilp32=march.rv32imc/mabi.ilp32 \
 march.rv32imafc/mabi.ilp32f=march.rv32imafdc/mabi.ilp32f \
