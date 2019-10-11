@@ -319,6 +319,16 @@ case "${host}" in
     tmake_file="cpu/loongarch/t-loongarch"
     ;;
  *-*-linux* | *-*-uclinux*)
+ *-zephyr-elf*)
+    case "${host_cpu}" in
+      i[567]86)
+        abi_baseline_pair=i486-zephyr-elf
+        ;;
+      x86_64)
+        abi_baseline_pair=x86_64-zephyr-elf
+        ;;
+    esac
+  *-*-linux* | *-*-uclinux*)
     case "${host_cpu}" in
       i[567]86)
         abi_baseline_pair=i486-linux-gnu
