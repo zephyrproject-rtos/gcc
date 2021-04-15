@@ -38,7 +38,7 @@ along with GCC; see the file COPYING3.  If not see
 #undef  SUBTARGET_CC1_SPEC
 #define SUBTARGET_CC1_SPEC						\
   LINUX_OR_ANDROID_CC (GNU_USER_TARGET_CC1_SPEC,			\
-		       GNU_USER_TARGET_CC1_SPEC " " ANDROID_CC1_SPEC)
+		       GNU_USER_TARGET_CC1_SPEC " " ANDROID_CC1_SPEC("-fpic"))
 
 #undef  CC1PLUS_SPEC
 #define CC1PLUS_SPEC							\
@@ -65,3 +65,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* The default value isn't sufficient in 64-bit mode.  */
 #define STACK_CHECK_PROTECT (TARGET_64BIT ? 16 * 1024 : 12 * 1024)
+
+#ifdef IN_LIBGCC2
+#define LIBGCC2_UNWIND_ATTRIBUTE __attribute__((visibility("default")))
+#endif

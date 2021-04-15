@@ -106,7 +106,11 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define LIB_SPEC GNU_USER_TARGET_LIB_SPEC
 
 #if defined(HAVE_LD_EH_FRAME_HDR)
+#ifdef USE_EH_FRAME_HDR_FOR_STATIC
+#define LINK_EH_SPEC "--eh-frame-hdr "
+#else
 #define LINK_EH_SPEC "%{!static|static-pie:--eh-frame-hdr} "
+#endif
 #endif
 
 #define GNU_USER_TARGET_LINK_GCC_C_SEQUENCE_SPEC \
