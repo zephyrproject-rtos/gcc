@@ -753,6 +753,10 @@ proc check_effective_target_freestanding { } {
 
 # Check to see that file I/O functions are available.
 proc check_effective_target_fileio { } {
+    if { [istarget arc64-*-*] } {
+	return 0
+    }
+
     return [check_no_compiler_messages fileio_available executable {
 #include <stdio.h>
 int main() {
@@ -3549,6 +3553,15 @@ proc check_effective_target_arc_atomic { } {
     return [check_no_compiler_messages arc_atomic assembly {
 	#if !defined(__ARC_ATOMIC__)
 	#error FOO
+	#endif
+    }]
+}
+
+# Return 1 if this is a compiler supporting ARC atomic operations
+proc check_effective_target_arc64_atomic { } {
+    return [check_no_compiler_messages arc_atomic assembly {
+	#if !defined(__ARC64_ATOMIC__)
+	#error NO_ATOMIC64
 	#endif
     }]
 }
@@ -7543,6 +7556,7 @@ proc check_effective_target_sync_int_128_runtime { } {
 proc check_effective_target_sync_long_long { } {
     if { [istarget i?86-*-*] || [istarget x86_64-*-*])
 	 || [istarget aarch64*-*-*]
+	 || ([istarget arc64-*-*] && [check_effective_target_arc64_atomic])
 	 || [istarget arm*-*-*]
 	 || [istarget alpha*-*-*]
 	 || ([istarget sparc*-*-*] && [check_effective_target_lp64])
@@ -7607,6 +7621,7 @@ proc check_effective_target_sync_long_long_runtime { } {
 	      } ""
 	  }])
 	 || [istarget aarch64*-*-*]
+	 || ([istarget arc64-*-*] && [check_effective_target_arc64_atomic])
 	 || [istarget arm*-*-uclinuxfdpiceabi]
 	 || ([istarget arm*-*-linux-*]
 	     && [check_runtime sync_longlong_runtime {
@@ -7676,6 +7691,7 @@ proc check_effective_target_sync_int_long { } {
 	     || [istarget powerpc*-*-*]
 	     || [istarget crisv32-*-*] || [istarget cris-*-*]
 	     || ([istarget sparc*-*-*] && [check_effective_target_sparc_v9])
+	     || ([istarget arc64-*-*] && [check_effective_target_arc64_atomic])
 	     || ([istarget arc*-*-*] && [check_effective_target_arc_atomic])
 	     || [check_effective_target_mips_llsc] }}]
 }
@@ -7699,7 +7715,9 @@ proc check_effective_target_sync_char_short { } {
 	     || [istarget powerpc*-*-*]
 	     || [istarget crisv32-*-*] || [istarget cris-*-*]
 	     || ([istarget sparc*-*-*] && [check_effective_target_sparc_v9])
-	     || ([istarget arc*-*-*] && [check_effective_target_arc_atomic])
+	     || ([istarget arc64-*-*] && [check_effective_target_arc64_atomic])
+	     || ([istarget arc-*-*] && [check_effective_target_arc_atomic])
+	     || ([istarget arceb-*-*] && [check_effective_target_arc_atomic])
 	     || [check_effective_target_mips_llsc] }}]
 }
 
