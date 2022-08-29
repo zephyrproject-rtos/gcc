@@ -7394,7 +7394,7 @@ arm_handle_isr_attribute (tree *node, tree name, tree args, int flags,
 		   name);
 	  *no_add_attrs = true;
 	}
-      else if (TARGET_VFP_BASE)
+      else if (TARGET_VFP_BASE && arm_arch_notm)
 	{
 	  warning (OPT_Wattributes, "FP registers might be clobbered despite %qE attribute: compile with %<-mgeneral-regs-only%>",
 		   name);
