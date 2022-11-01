@@ -78,6 +78,14 @@ ARC_CPU (arc601_mul32x16, 6xx, FL_NORM|FL_MUL32x16, NONE, ARC600)
 ARC_CPU (arc700, 700, 0, NONE, ARC700_4_2_STD)
 ARC_CPU (nps400, 700, 0, NONE, ARC700_4_2_STD)
 
+/* These are additional annotations for multilib configurations. They're inside
+ * a comment so they are ignored by C code using this file
+
+ARC_TP_REGNO (25)
+ARC_TP_REGNO (26)
+
+ */
+
 /* Local Variables: */
 /* mode: c */
 /* End: */

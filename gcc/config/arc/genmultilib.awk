@@ -33,7 +33,7 @@ BEGIN {
   FS ="[(, \t)]+"
   comment = 1
   n_cores = 0
-  n_reuse = 0
+  n_tpreg = 0
 }
 
 ##################################################################
@@ -138,14 +138,16 @@ BEGIN {
 	      exit 1
 	    }
 	}
-      line = "mcpu." name "=" line
-      reuse[n_reuse] = line
-      n_reuse++
     }
 
   core = name
   cores[n_cores] = core
   n_cores++
+}
+
+/^ARC_TP_REGNO/ {
+  tp_regs[n_tpreg] = $2
+  n_tpreg++
 }
 
 ##################################################################
@@ -162,7 +164,8 @@ BEGIN {
 END {
   m_options    = "\nMULTILIB_OPTIONS = "
   m_dirnames   = "\nMULTILIB_DIRNAMES ="
-  m_reuse      = "\nMULTILIB_REUSE ="
+  m_required   = ""
+  m_reuse      = ""
 
   sep = ""
   for (c = 0; c < n_cores; c++)
@@ -172,12 +175,30 @@ END {
       sep = "/"
     }
 
-  sep = ""
-  for (c = 0; c < n_reuse; c++)
+  sep = " "
+  for (t = 0; t < n_tpreg; t++)
     {
-      m_reuse = m_reuse sep reuse[c]
-      sep = "\nMULTILIB_REUSE +="
+      m_options  = m_options sep "mtp-regno=" tp_regs[t]
+      m_dirnames = m_dirnames " tp-" tp_regs[t]
+      sep = "/"
     }
+
+  if (n_tpreg > 0)
+    {
+      m_required = "\nMULTILIB_REQUIRED ="
+      m_reuse    = "\nMULTILIB_REUSE ="
+
+      sep = " "
+      for (c = 0; c < n_cores; c++)
+        {
+	  m_reuse = m_reuse sep "mcpu." cores[c] "/" "mtp-regno." tp_regs[0] "=" "mcpu." cores[c]
+	  for (t = 0; t < n_tpreg; t++)
+	    {
+	      m_required = m_required sep "mcpu=" cores[c] "/" "mtp-regno=" tp_regs[t]
+	    }
+	}
+    }
+
   ############################################################
   # Output that Stuff
   ############################################################
@@ -188,6 +209,8 @@ END {
 
       print m_options
       print m_dirnames
+      print m_required
+      print m_reuse
 
       ############################################################
       # Legacy Aliases
