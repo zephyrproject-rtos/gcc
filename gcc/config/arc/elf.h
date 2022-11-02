@@ -55,9 +55,9 @@ along with GCC; see the file COPYING3.  If not see
 # endif
 #endif
 
-/* Bare-metal toolchains do not need a thread pointer register.  */
+/* Zephyr toolchain use register 26 as a thread pointer register. */
 #undef TARGET_ARC_TP_REGNO_DEFAULT
-#define TARGET_ARC_TP_REGNO_DEFAULT -1
+#define TARGET_ARC_TP_REGNO_DEFAULT 26
 
 /* Indexed loads are default.  */
 #undef TARGET_INDEXED_LOADS_DEFAULT
