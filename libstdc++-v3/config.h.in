@@ -766,6 +766,9 @@
    namespace std for C++11. */
 #undef _GLIBCXX_USE_C99_MATH_FUNCS
 
+/* Define if C99 long double math functions are available in <math.h>. */
+#undef _GLIBCXX_USE_C99_MATH_LONG_DOUBLE_FUNCS
+
 /* Define if C99 functions or macros in <math.h> should be imported in
    <tr1/cmath> in namespace std::tr1. */
 #undef _GLIBCXX_USE_C99_MATH_TR1
