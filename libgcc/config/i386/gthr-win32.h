@@ -82,6 +82,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #ifndef __OBJC__
 #define __OBJC__
 #endif
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 /* Now undef the windows BOOL.  */
 #undef BOOL
@@ -526,6 +527,7 @@ __gthread_recursive_mutex_destroy (__gthread_recursive_mutex_t *__mutex)
 
 #else /* ! __GTHREAD_HIDE_WIN32API */
 
+#define WIN32_LEAN_AND_MEAN
 #define NOGDI
 #include <windows.h>
 #include <errno.h>
