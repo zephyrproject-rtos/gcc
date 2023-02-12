@@ -1980,7 +1980,7 @@ init_spec (void)
 #endif
 
 #if defined LINK_EH_SPEC || defined LINK_BUILDID_SPEC || \
-    defined LINKER_HASH_STYLE
+    defined LINKER_HASH_STYLE || defined LINK_LIBC_SPEC
 # ifdef LINK_BUILDID_SPEC
   /* Prepend LINK_BUILDID_SPEC to whatever link_spec we had before.  */
   obstack_grow (&obstack, LINK_BUILDID_SPEC, sizeof (LINK_BUILDID_SPEC) - 1);
@@ -1998,6 +1998,10 @@ init_spec (void)
     obstack_grow (&obstack, LINKER_HASH_STYLE, sizeof (LINKER_HASH_STYLE) - 1);
     obstack_1grow (&obstack, ' ');
   }
+# endif
+# ifdef LINK_LIBC_SPEC
+  /* Prepend LINK_LIBC_SPEC to whatever link_spec we had before. */
+  obstack_grow (&obstack, LINK_LIBC_SPEC, sizeof (LINK_LIBC_SPEC) - 1);
 # endif
   obstack_grow0 (&obstack, link_spec, strlen (link_spec));
   link_spec = XOBFINISH (&obstack, const char *);
