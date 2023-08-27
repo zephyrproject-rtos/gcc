@@ -74,16 +74,16 @@ void float_cmp_func ()
 {
     /* { dg-final { scan-assembler-not "fcmp" } } */
     if (f2 <= f3) 
-        print ("le");
+        f1 = f3;
     else if (f2 == f3) 
-        print ("eq");
+        f1 = f3;
     else if (f2 < f3) 
-        print ("lt");
+        f1 = f3;
     else if (f2 > f3) 
-        print ("gt");
+        f1 = f3;
     else if (f2 >= f3) 
-        print ("ge");
+        f1 = f3;
     else if (f2 != f3) 
-        print ("ne");
+        f1 = f3;
     
 }

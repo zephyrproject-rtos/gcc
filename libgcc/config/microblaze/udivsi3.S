@@ -41,6 +41,16 @@
 	.globl	__udivsi3
 	.ent	__udivsi3
 	.type	__udivsi3,@function
+#ifdef __arch64__
+        .align 3
+__udivsi3:
+	.frame	r1,0,r15	
+
+	ADDLIK   r1,r1,-24
+    	SLI     r29,r1,0
+	SLI     r30,r1,8
+	SLI     r31,r1,16
+#else
 __udivsi3:
 	.frame	r1,0,r15	
 
@@ -48,56 +58,111 @@ __udivsi3:
     	SWI     r29,r1,0
 	SWI     r30,r1,4
 	SWI     r31,r1,8
-
+#endif
+#ifdef __arch64__
+        BEAEQI    r6,$LaDiv_By_Zero           # Div_by_Zero   # Division Error
+        BEAEQID   r5,$LaResult_Is_Zero        # Result is Zero
+#else
 	BEQI    r6,$LaDiv_By_Zero           # Div_by_Zero   # Division Error
 	BEQID   r5,$LaResult_Is_Zero        # Result is Zero 
+#endif
 	ADDIK   r30,r0,0                    # Clear mod
 	ADDIK   r29,r0,32                   # Initialize the loop count
 
         # Check if r6 and r5 are equal # if yes, return 1
 	RSUB 	r18,r5,r6
+#ifdef __arch64__
+        BEAEQID   r18,$LaRETURN_HERE
+#else
 	BEQID	r18,$LaRETURN_HERE
+#endif
 	ADDIK	r3,r0,1
 
         # Check if (uns)r6 is greater than (uns)r5. In that case, just return 0
 	XOR	r18,r5,r6
-	BGEID	r18,16
+#ifdef __arch64__
+	BEAGEID	r18,16
+#else
+        BGEID   r18,16
+#endif
 	ADD	r3,r0,r0                    # We would anyways clear r3
+#ifdef __arch64__
+        BEALTI    r6,$LaRETURN_HERE           # r6[bit 31 = 1] hence is greater
+        BREAI     $LCheckr6
+        RSUB    r18,r6,r5                   # MICROBLAZEcmp
+        BEALTI    r18,$LaRETURN_HERE
+#else
 	BLTI	r6,$LaRETURN_HERE           # r6[bit 31 = 1] hence is greater
 	BRI	$LCheckr6
 	RSUB	r18,r6,r5                   # MICROBLAZEcmp
 	BLTI	r18,$LaRETURN_HERE
-
+#endif
         # If r6 [bit 31] is set, then return result as 1
 $LCheckr6:
-	BGTI	r6,$LaDIV0
-	BRID	$LaRETURN_HERE
+#ifdef __arch64__
+	BEAGTI	r6,$LaDIV0
+	BREAID	$LaRETURN_HERE
+#else
+        BGTI    r6,$LaDIV0
+        BRID    $LaRETURN_HERE
+#endif
 	ADDIK	r3,r0,1
 
         # First part try to find the first '1' in the r5
 $LaDIV0:
+#ifdef __arch64__
+        BEALTI    r5,$LaDIV2
+#else
 	BLTI    r5,$LaDIV2	
+#endif
 $LaDIV1:
 	ADD     r5,r5,r5                    # left shift logical r5
+#ifdef __arch64__
+        BEAGTID   r5,$LaDIV1
+#else
 	BGTID   r5,$LaDIV1       
+#endif
 	ADDIK   r29,r29,-1
 $LaDIV2:
 	ADD     r5,r5,r5                    # left shift logical  r5 get the '1' into the Carry
 	ADDC    r30,r30,r30                 # Move that bit into the Mod register
 	RSUB    r31,r6,r30                  # Try to subtract (r30 a r6)
+#ifdef __arch64__
+        BEALTI    r31,$LaMOD_TOO_SMALL
+#else
     	BLTI    r31,$LaMOD_TOO_SMALL
+#endif
 	OR      r30,r0,r31                  # Move the r31 to mod since the result was positive
 	ADDIK   r3,r3,1
 $LaMOD_TOO_SMALL:
 	ADDIK   r29,r29,-1
+#ifdef __arch64__
+        BEAEQi    r29,$LaLOOP_END
+        ADD     r3,r3,r3 # Shift in the '1' into div
+        BREAI     $LaDIV2   # Div2
+$LaLOOP_END:
+        BREAI     $LaRETURN_HERE
+#else
 	BEQi    r29,$LaLOOP_END
 	ADD     r3,r3,r3 # Shift in the '1' into div
 	BRI     $LaDIV2   # Div2
 $LaLOOP_END:
 	BRI     $LaRETURN_HERE
+#endif
 $LaDiv_By_Zero:
 $LaResult_Is_Zero:
 	OR      r3,r0,r0 # set result to 0
+
+#ifdef __arch64__
+$LaRETURN_HERE:
+        # Restore values of CSRs and that of r3 and the divisor and the dividend
+	LLI     r29,r1,0
+	LLI     r30,r1,8
+	LLI     r31,r1,16
+	ADDLIK   r1,r1,24
+	RTSD    r15,8
+	NOP
+#else
 $LaRETURN_HERE:
         # Restore values of CSRs and that of r3 and the divisor and the dividend
 	LWI     r29,r1,0
@@ -105,5 +170,6 @@ $LaRETURN_HERE:
 	LWI     r31,r1,8
 	RTSD    r15,8
 	ADDIK   r1,r1,12
+#endif
         .end __udivsi3
 	.size	__udivsi3, . - __udivsi3
