@@ -29,13 +29,26 @@
 .section .note.GNU-stack,"",%progbits
 .previous
 #endif
+#ifdef __arch64__
+    .section .init, "ax"
+    ll      r15, r0, r1
+    addlik   r1, r1, 32
+    rtsd    r15, 8
+    nop 
 
+    .section .fini, "ax"
+    ll      r15, r0, r1
+    addlik   r1, r1, 32   
+    rtsd    r15, 8
+    nop 
+#else
     .section .init, "ax"
     lw      r15, r0, r1
     rtsd    r15, 8 
-    addik   r1, r1, 8
+    addik   r1, r1, 16
 
     .section .fini, "ax"
     lw      r15, r0, r1
     rtsd    r15, 8 
-    addik   r1, r1, 8    
+    addik   r1, r1, 16   
+#endif
