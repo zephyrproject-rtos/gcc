@@ -100,4 +100,11 @@ microblaze_cpp_define (cpp_reader *pfile)
         builtin_define ("HAVE_HW_FPU_SQRT");
       builtin_define ("__HAVE_HW_FPU_SQRT__");
     }
+  if (TARGET_MB_64)
+    {
+      builtin_define ("__microblaze64");	
+      builtin_define ("__arch64__");
+      builtin_define ("__microblaze64__");
+      builtin_define ("__MICROBLAZE64__");
+    }
 }  

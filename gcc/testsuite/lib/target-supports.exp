@@ -729,6 +729,7 @@ proc check_profiling_available { test_what } {
 	     || [istarget m68k-*-elf]
 	     || [istarget m68k-*-uclinux*]
 	     || [istarget mips*-*-elf*]
+	     || [istarget microblaze*-*-*]
 	     || [istarget mmix-*-*]
 	     || [istarget mn10300-*-elf*]
 	     || [istarget moxie-*-elf*]
@@ -8661,6 +8662,7 @@ proc check_effective_target_sync_int_long { } {
 		 && [check_effective_target_arm_acq_rel])
 	     || [istarget bfin*-*linux*]
 	     || [istarget hppa*-*linux*]
+	     || [istarget microblaze*-*linux*]
 	     || [istarget s390*-*-*] 
 	     || [istarget powerpc*-*-*]
 	     || [istarget cris-*-*]

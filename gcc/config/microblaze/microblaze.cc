@@ -165,6 +165,9 @@ int microblaze_no_unsafe_delay;
 /* Set to one if the targeted core has the CLZ insn.  */
 int microblaze_has_clz = 0;
 
+/* Set to one if the targeted core has barrel-shift and cpu > 10.0 */
+int microblaze_has_bitfield = 0;
+
 /* Which CPU pipeline do we use. We haven't really standardized on a CPU 
    version having only a particular type of pipeline. There can still be 
    options on the CPU to scale pipeline features up or down. :( 
@@ -239,6 +242,63 @@ section *sdata2_section;
 #undef TARGET_HAVE_TLS
 #define TARGET_HAVE_TLS true
 #endif
+
+/*  Convert a version number of the form "vX.YY.Z" to an integer encoding
+    for easier range comparison.  */
+static int
+microblaze_version_to_int (const char *version)
+{
+  const char *p, *v;
+  const char *tmpl = "vXX.YY.Z";
+  int iver1 =0, iver2 =0, iver3 =0;
+
+  p = version;
+  v = tmpl;
+
+  while (*p)
+    {
+      if (*v == 'X')
+	{			/* Looking for major  */
+          if (*p == '.')
+            {
+              *v++;
+            }
+          else
+            {
+	      if (!(*p >= '0' && *p <= '9'))
+	        return -1;
+	      iver1 += (int) (*p - '0');
+              iver1 *= 1000;
+	     }
+        }
+      else if (*v == 'Y')
+	{			/* Looking for minor  */
+	  if (!(*p >= '0' && *p <= '9'))
+	    return -1;
+	  iver2 += (int) (*p - '0');
+	  iver2 *= 10;
+	}
+      else if (*v == 'Z')
+	{			/* Looking for compat  */
+	  if (!(*p >= 'a' && *p <= 'z'))
+	    return -1;
+      iver3 = ((int) (*p)) - 96;
+	}
+      else
+	{
+	  if (*p != *v)
+	    return -1;
+	}
+
+      v++;
+      p++;
+    }
+
+  if (*p)
+    return -1;
+
+  return iver1 + iver2 + iver3;
+}
 
 /* Return truth value if a CONST_DOUBLE is ok to be a legitimate constant.  */
 static bool
@@ -324,10 +384,10 @@ simple_memory_operand (rtx op, machine_mode mode ATTRIBUTE_UNUSED)
 	{
 	  return 1;
 	}
-      else if (GET_CODE (plus0) == REG && GET_CODE (plus1) == REG)
+      /*else if (GET_CODE (plus0) == REG && GET_CODE (plus1) == REG)
 	{
 	  return 1;
-	}
+	}*/
       else
 	return 0;
 
@@ -375,7 +435,7 @@ double_memory_operand (rtx op, machine_mode mode)
     return 1;
 
   return memory_address_p ((GET_MODE_CLASS (mode) == MODE_INT
-			    ? E_SImode : E_SFmode),
+			    ? Pmode : E_SFmode),
 			   plus_constant (Pmode, addr, 4));
 }
 
@@ -622,7 +682,7 @@ microblaze_legitimize_tls_address(rtx x, rtx reg)
          /* Load the addend.  */
          addend = gen_rtx_UNSPEC (Pmode, gen_rtvec (2, x, GEN_INT (TLS_DTPREL)),
 				  UNSPEC_TLS);
-         addend = force_reg (SImode, gen_rtx_CONST (SImode, addend));
+         addend = force_reg (Pmode, gen_rtx_CONST (Pmode, addend));
          dest = gen_rtx_PLUS (Pmode, dest, addend);
          break;
 
@@ -640,7 +700,7 @@ microblaze_classify_unspec (struct microblaze_address_info *info, rtx x)
 
   if (XINT (x, 1) == UNSPEC_GOTOFF)
     {
-      info->regA = gen_rtx_REG (SImode, PIC_OFFSET_TABLE_REGNUM);
+      info->regA = gen_rtx_REG (Pmode, PIC_OFFSET_TABLE_REGNUM);
       info->type = ADDRESS_GOTOFF;
     }
   else if (XINT (x, 1) == UNSPEC_PLT)
@@ -1243,8 +1303,16 @@ microblaze_block_move_loop (rtx dest, rtx src, HOST_WIDE_INT length)
   emit_move_insn (dest_reg, plus_constant (Pmode, dest_reg, MAX_MOVE_BYTES));
 
   /* Emit the test & branch.  */
-  emit_insn (gen_cbranchsi4 (gen_rtx_NE (SImode, src_reg, final_src),
+
+  if (TARGET_MB_64) {
+    emit_insn (gen_cbranchdi4 (gen_rtx_NE (Pmode, src_reg, final_src),
 			     src_reg, final_src, label));
+    }
+  else {
+    emit_insn (gen_cbranchsi4 (gen_rtx_NE (Pmode, src_reg, final_src),
+			     src_reg, final_src, label));
+  
+    }
 
   /* Mop up any left-over bytes.  */
   if (leftover)
@@ -1339,8 +1407,7 @@ microblaze_rtx_costs (rtx x, machine_mode mode, int outer_code ATTRIBUTE_UNUSED,
       {
 	if (TARGET_BARREL_SHIFT)
 	  {
-	    if (MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v5.00.a")
-		>= 0)
+	    if (microblaze_version_to_int(microblaze_select_cpu) >= microblaze_version_to_int("v5.00.a"))
 	      *total = COSTS_N_INSNS (1);
 	    else
 	      *total = COSTS_N_INSNS (2);
@@ -1401,8 +1468,7 @@ microblaze_rtx_costs (rtx x, machine_mode mode, int outer_code ATTRIBUTE_UNUSED,
 	  }
 	else if (!TARGET_SOFT_MUL)
 	  {
-	    if (MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v5.00.a")
-		>= 0)
+	    if (microblaze_version_to_int(microblaze_select_cpu) >= microblaze_version_to_int("v5.00.a"))
 	      *total = COSTS_N_INSNS (1);
 	    else
 	      *total = COSTS_N_INSNS (3);
@@ -1576,14 +1642,20 @@ microblaze_function_arg_advance (cumulative_args_t cum_v,
       break;
 
     case E_DFmode:
-      cum->arg_words += 2;
+      if (TARGET_MB_64)
+       cum->arg_words++;
+      else
+       cum->arg_words += 2;
       if (!cum->gp_reg_found && cum->arg_number <= 2)
 	cum->fp_code += 2 << ((cum->arg_number - 1) * 2);
       break;
 
     case E_DImode:
       cum->gp_reg_found = 1;
-      cum->arg_words += 2;
+      if (TARGET_MB_64)
+       cum->arg_words++;
+      else
+       cum->arg_words += 2;
       break;
 
     case E_QImode:
@@ -1675,72 +1747,13 @@ function_arg_partial_bytes (cumulative_args_t cum_v,
   return 0;
 }
 
-/*  Convert a version number of the form "vX.YY.Z" to an integer encoding 
-    for easier range comparison.  */
-static int
-microblaze_version_to_int (const char *version)
-{
-  const char *p, *v;
-  const char *tmpl = "vXX.YY.Z";
-  int iver = 0;
-
-  p = version;
-  v = tmpl;
-
-  while (*p)
-    {
-      if (*v == 'X')
-	{			/* Looking for major  */
-          if (*p == '.')
-            {
-              v++;
-            }
-          else
-            {
-	      if (!(*p >= '0' && *p <= '9'))
-	        return -1;
-	      iver += (int) (*p - '0');
-              iver *= 10;
-	     }
-        }
-      else if (*v == 'Y')
-	{			/* Looking for minor  */
-	  if (!(*p >= '0' && *p <= '9'))
-	    return -1;
-	  iver += (int) (*p - '0');
-	  iver *= 10;
-	}
-      else if (*v == 'Z')
-	{			/* Looking for compat  */
-	  if (!(*p >= 'a' && *p <= 'z'))
-	    return -1;
-	  iver *= 10;
-	  iver += (int) (*p - 'a');
-	}
-      else
-	{
-	  if (*p != *v)
-	    return -1;
-	}
-
-      v++;
-      p++;
-    }
-
-  if (*p)
-    return -1;
-
-  return iver;
-}
-
-
 static void
 microblaze_option_override (void)
 {
   int i, start;
   int regno;
   machine_mode mode;
-  int ver;
+  int ver,ver_int;
 
   microblaze_section_threshold = (OPTION_SET_P (g_switch_value)
 				  ? g_switch_value
@@ -1761,13 +1774,13 @@ microblaze_option_override (void)
   /* Check the MicroBlaze CPU version for any special action to be done.  */
   if (microblaze_select_cpu == NULL)
     microblaze_select_cpu = MICROBLAZE_DEFAULT_CPU;
-  ver = microblaze_version_to_int (microblaze_select_cpu);
-  if (ver == -1)
+  ver_int = microblaze_version_to_int (microblaze_select_cpu);
+  if (ver_int == -1)
     {
       error ("%qs is an invalid argument to %<-mcpu=%>", microblaze_select_cpu);
     }
 
-  ver = MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v3.00.a");
+  ver = ver_int - microblaze_version_to_int("v3.00.a");
   if (ver < 0)
     {
       /* No hardware exceptions in earlier versions. So no worries.  */
@@ -1778,8 +1791,7 @@ microblaze_option_override (void)
       microblaze_pipe = MICROBLAZE_PIPE_3;
     }
   else if (ver == 0
-	   || (MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v4.00.b")
-	       == 0))
+	   || (ver_int ==  microblaze_version_to_int("v4.00.b")))
     {
 #if 0
       microblaze_select_flags |= (MICROBLAZE_MASK_NO_UNSAFE_DELAY);
@@ -1796,11 +1808,9 @@ microblaze_option_override (void)
 #endif
       microblaze_no_unsafe_delay = 0;
       microblaze_pipe = MICROBLAZE_PIPE_5;
-      if (MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v5.00.a") == 0
-	  || MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu,
-					 "v5.00.b") == 0
-	  || MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu,
-					 "v5.00.c") == 0)
+      if ((ver_int == microblaze_version_to_int("v5.00.a"))
+	  || (ver_int == microblaze_version_to_int("v5.00.b"))
+	  || (ver_int == microblaze_version_to_int("v5.00.c")))
 	{
 	  /* Pattern compares are to be turned on by default only when 
  	     compiling for MB v5.00.'z'.  */
@@ -1808,7 +1818,7 @@ microblaze_option_override (void)
 	}
     }
 
-  ver = MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v6.00.a");
+  ver = ver_int - microblaze_version_to_int("v6.00.a");
   if (ver < 0)
     {
       if (TARGET_MULTIPLY_HIGH)
@@ -1817,7 +1827,7 @@ microblaze_option_override (void)
 		 "%<-mcpu=v6.00.a%> or greater");
     }
 
-  ver = MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v8.10.a");
+  ver = ver_int - microblaze_version_to_int("v8.10.a");
   microblaze_has_clz = 1;
   if (ver < 0)
     {
@@ -1826,7 +1836,7 @@ microblaze_option_override (void)
     }
 
   /* TARGET_REORDER defaults to 2 if -mxl-reorder not specified.  */
-  ver = MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v8.30.a");
+  ver = ver_int - microblaze_version_to_int("v8.30.a");
   if (ver < 0)
     {
         if (TARGET_REORDER == 1)
@@ -1840,6 +1850,19 @@ microblaze_option_override (void)
 	  warning (0, "%<-mxl-reorder%> requires %<-mxl-pattern-compare%> for "
 		   "%<-mcpu=v8.30.a%>");
         TARGET_REORDER = 0;
+    }
+  ver = ver_int - microblaze_version_to_int("v10.0");
+  if (ver < 0)
+    {
+	if (TARGET_AREA_OPTIMIZED_2)
+	 warning (0, "-mxl-frequency can be used only with -mcpu=v10.0 or greater");
+    }
+  else
+    {
+	if (TARGET_AREA_OPTIMIZED_2)
+	 microblaze_pipe = MICROBLAZE_PIPE_8;
+        if (TARGET_BARREL_SHIFT)
+         microblaze_has_bitfield = 1;
     }
 
   if (TARGET_MULTIPLY_HIGH && TARGET_SOFT_MUL)
@@ -1997,7 +2020,7 @@ microblaze_save_volatiles (tree func)
 int
 microblaze_is_interrupt_variant (void)
 {
-  return (interrupt_handler || fast_interrupt);
+  return (interrupt_handler || fast_interrupt || break_handler);
 }
 int
 microblaze_is_break_handler (void)
@@ -2036,7 +2059,7 @@ microblaze_must_save_register (int regno)
     {
       if (df_regs_ever_live_p (regno) 
 	  || regno == MB_ABI_MSR_SAVE_REG
-	  || ((interrupt_handler || fast_interrupt)
+	  || ((interrupt_handler || fast_interrupt || break_handler)
               && (regno == MB_ABI_ASM_TEMP_REGNUM
 	          || regno == MB_ABI_EXCEPTION_RETURN_ADDR_REGNUM)))
 	return 1;
@@ -2056,6 +2079,136 @@ microblaze_must_save_register (int regno)
     return 1;
 
   return 0;
+}
+
+static bool
+microblaze_parm_needs_stack (cumulative_args_t args_so_far, tree type)
+{
+  int unsignedp;
+  rtx entry_parm;
+
+  /* Catch errors.  */
+  if (type == NULL || type == error_mark_node)
+    return true;
+
+  if (TREE_CODE (type) == POINTER_TYPE)
+    return true;
+
+  /* Handle types with no storage requirement.  */
+  if (TYPE_MODE (type) == VOIDmode)
+    return false;
+
+   /* Handle complex types.  */
+  if (TREE_CODE (type) == COMPLEX_TYPE)
+    return (microblaze_parm_needs_stack (args_so_far, TREE_TYPE (type))
+             || microblaze_parm_needs_stack (args_so_far, TREE_TYPE (type)));
+
+  /* Handle transparent aggregates.  */
+  if ((TREE_CODE (type) == UNION_TYPE || TREE_CODE (type) == RECORD_TYPE)
+     && TYPE_TRANSPARENT_AGGR (type))
+  type = TREE_TYPE (first_field (type));
+
+  /* See if this arg was passed by invisible reference.  */
+  function_arg_info arg (type, /*named=*/true);
+  apply_pass_by_reference_rules (get_cumulative_args (args_so_far), arg);
+
+  /* Find mode as it is passed by the ABI.  */
+  unsignedp = TYPE_UNSIGNED (type);
+  arg.mode = promote_mode (arg.type, arg.mode, &unsignedp);
+
+  /* If there is no incoming register, we need a stack.  */
+  entry_parm = microblaze_function_arg (args_so_far, arg);
+  if (entry_parm == NULL)
+    return true;
+
+  /* Likewise if we need to pass both in registers and on the stack.  */
+  if (GET_CODE (entry_parm) == PARALLEL
+     && XEXP (XVECEXP (entry_parm, 0, 0), 0) == NULL_RTX)
+   return true;
+
+  /* Also true if we're partially in registers and partially not.  */
+  if (function_arg_partial_bytes (args_so_far, arg) != 0)
+     return true;
+
+  /* Update info on where next arg arrives in registers.  */
+  microblaze_function_arg_advance (args_so_far, arg);
+  return false;
+}
+
+static bool
+microblaze_function_parms_need_stack (tree fun, bool incoming)
+{
+  tree fntype, result;
+  CUMULATIVE_ARGS args_so_far_v;
+  cumulative_args_t args_so_far;
+  int num_of_args = 0;
+
+  /* Must be a libcall, all of which only use reg parms.  */
+  if (!fun)
+    return true;
+
+  fntype = fun;
+  if (!TYPE_P (fun))
+    fntype = TREE_TYPE (fun);
+
+  /* Varargs functions need the parameter save area.  */
+  if ((!incoming && !prototype_p (fntype)) || stdarg_p (fntype))
+    return true;
+
+  INIT_CUMULATIVE_ARGS(args_so_far_v, fntype, NULL_RTX,0,0);
+  args_so_far = pack_cumulative_args (&args_so_far_v);
+
+  /* When incoming, we will have been passed the function decl.
+ *    *      It is necessary to use the decl to handle K&R style functions,
+ *       *      where TYPE_ARG_TYPES may not be available.  */
+  if (incoming)
+    {
+      gcc_assert (DECL_P (fun));
+      result = DECL_RESULT (fun);
+    }
+  else
+    result = TREE_TYPE (fntype);
+
+  if (result && aggregate_value_p (result, fntype))
+    {
+      if (!TYPE_P (result))
+        result = build_pointer_type (result);
+        microblaze_parm_needs_stack (args_so_far, result);
+    }
+
+  if (incoming)
+    {
+      tree parm;
+      for (parm = DECL_ARGUMENTS (fun);
+           parm && parm != void_list_node;
+           parm = TREE_CHAIN (parm))
+         if (microblaze_parm_needs_stack (args_so_far, TREE_TYPE (parm)))
+           return true;
+    }
+  else
+    {
+      function_args_iterator args_iter;
+      tree arg_type;
+
+      FOREACH_FUNCTION_ARGS (fntype, arg_type, args_iter)
+      {
+        num_of_args;
+        if (microblaze_parm_needs_stack (args_so_far, arg_type))
+         return true;
+      }
+    }
+
+  if (num_of_args > 3) return true;
+
+  return false;
+}
+
+int  microblaze_reg_parm_stack_space(tree fun)
+{
+  if (microblaze_function_parms_need_stack (fun,false))
+    return MAX_ARGS_IN_REGISTERS * UNITS_PER_WORD;
+  else
+    return 0;
 }
 
 /* Return the bytes needed to compute the frame pointer from the current
@@ -2122,9 +2275,6 @@ compute_frame_size (HOST_WIDE_INT size)
   fast_interrupt =
     microblaze_fast_interrupt_function_p (current_function_decl);
   save_volatiles = microblaze_save_volatiles (current_function_decl);
-  if (break_handler)
-    interrupt_handler = break_handler;
-
   gp_reg_size = 0;
   mask = 0;
   var_size = size;
@@ -2147,7 +2297,7 @@ compute_frame_size (HOST_WIDE_INT size)
 
 	  if (regno != MB_ABI_SUB_RETURN_ADDR_REGNUM)
 	    /* Don't account for link register. It is accounted specially below.  */
-	    gp_reg_size += GET_MODE_SIZE (SImode);
+	    gp_reg_size += GET_MODE_SIZE (Pmode);
 
 	  mask |= (1L << (regno - GP_REG_FIRST));
 	}
@@ -2155,9 +2305,14 @@ compute_frame_size (HOST_WIDE_INT size)
 
   total_size += gp_reg_size;
 
-  /* Add 4 bytes for MSR.  */
+  /* Add 4/8 bytes for MSR.  */
   if (microblaze_is_interrupt_variant ())
-    total_size += 4;
+    {
+      if (TARGET_MB_64)
+        total_size += 8;
+      else
+        total_size += 4;
+    }
 
   /* No space to be allocated for link register in leaf functions with no other
      stack requirements.  */
@@ -2416,7 +2571,7 @@ print_operand (FILE * file, rtx op, int letter)
 
       if ((letter == 'M' && !WORDS_BIG_ENDIAN)
 	  || (letter == 'L' && WORDS_BIG_ENDIAN) || letter == 'D')
-	regnum++;
+	regnum++; 
 
       fprintf (file, "%s", reg_names[regnum]);
     }
@@ -2442,23 +2597,27 @@ print_operand (FILE * file, rtx op, int letter)
   else if (letter == 'h' || letter == 'j')
     {
       long val[2];
+      long l[2];
       if (code == CONST_DOUBLE)
 	{
 	  if (GET_MODE (op) == DFmode)
-	    REAL_VALUE_TO_TARGET_DOUBLE (*CONST_DOUBLE_REAL_VALUE (op), val);
+            {
+  	      if (TARGET_MB_64)
+	        REAL_VALUE_TO_TARGET_LONG_DOUBLE (*CONST_DOUBLE_REAL_VALUE (op), val);
+	      else
+	        REAL_VALUE_TO_TARGET_DOUBLE (*CONST_DOUBLE_REAL_VALUE (op), val);
+	    }
 	  else
 	    {
-	      val[0] = CONST_DOUBLE_HIGH (op);
-	      val[1] = CONST_DOUBLE_LOW (op);
+	      REAL_VALUE_TO_TARGET_DOUBLE (*CONST_DOUBLE_REAL_VALUE (op), l);
+	      val[1] = l[WORDS_BIG_ENDIAN == 0];
+	      val[0] = l[WORDS_BIG_ENDIAN != 0];
 	    }
 	}
-      else if (code == CONST_INT)
+      else if (code == CONST_INT || code == CONST)// || code == SYMBOL_REF ||code == LABEL_REF)
         {
 	  val[0] = (INTVAL (op) & 0xffffffff00000000LL) >> 32;
 	  val[1] = INTVAL (op) & 0x00000000ffffffffLL;
-	  if (val[0] == 0 && val[1] < 0)
-	    val[0] = -1;
-	    
         }
       fprintf (file, "0x%8.8lx", (letter == 'h') ? val[0] : val[1]);
     }
@@ -2469,7 +2628,7 @@ print_operand (FILE * file, rtx op, int letter)
 	  unsigned long value_long;
 	  REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (op),
 				       value_long);
-	  fprintf (file, "0x%lx", value_long);
+	  fprintf (file, "0x%08x", (unsigned int) value_long);
 	}
       else
 	{
@@ -2635,6 +2794,59 @@ print_operand_address (FILE * file, rtx addr)
     }
 }
 
+/* Output an element in the table of global constructors. */
+void
+microblaze_asm_constructor (rtx symbol ATTRIBUTE_UNUSED, int priority)
+{
+    const char *section = ".ctors";
+    char buf[16];
+
+    if (priority != DEFAULT_INIT_PRIORITY)
+      {
+      sprintf (buf, ".ctors.%.5u",
+      /* Invert the numbering so the linker puts us in the proper
+      order; constructors are run from right to left, and the
+      linker sorts in increasing order.  */
+      MAX_INIT_PRIORITY - priority);
+      section = buf;
+      }
+
+    switch_to_section (get_section (section, 0, NULL));
+    assemble_align (POINTER_SIZE);
+    if (TARGET_MB_64)
+      fputs ("\t.dword\t", asm_out_file);
+    else
+      fputs ("\t.word\t", asm_out_file);
+    output_addr_const (asm_out_file, symbol);
+    fputs ("\n", asm_out_file);
+}
+
+/* Output an element in the table of global destructors. */
+void
+microblaze_asm_destructor (rtx symbol, int priority)
+{
+    const char *section = ".dtors";
+    char buf[16];
+    if (priority != DEFAULT_INIT_PRIORITY)
+      {
+      sprintf (buf, ".dtors.%.5u",
+      /* Invert the numbering so the linker puts us in the proper
+      order; constructors are run from right to left, and the
+      linker sorts in increasing order.  */
+      MAX_INIT_PRIORITY - priority);
+      section = buf;
+      }
+
+    switch_to_section (get_section (section, 0, NULL));
+    assemble_align (POINTER_SIZE);
+    if (TARGET_MB_64)
+      fputs ("\t.dword\t", asm_out_file);
+    else
+     fputs ("\t.word\t", asm_out_file);
+    output_addr_const (asm_out_file, symbol);
+    fputs ("\n", asm_out_file);
+}
+
 /* Emit either a label, .comm, or .lcomm directive, and mark that the symbol
    is used, so that we don't emit an .extern for it in 
    microblaze_asm_file_end.  */
@@ -2696,7 +2908,7 @@ save_restore_insns (int prologue)
   /* For interrupt_handlers, need to save/restore the MSR.  */
   if (microblaze_is_interrupt_variant ())
     {
-      isr_mem_rtx = gen_rtx_MEM (SImode,
+      isr_mem_rtx = gen_rtx_MEM (Pmode,
 				 gen_rtx_PLUS (Pmode, base_reg_rtx,
 					       GEN_INT (current_frame_info.
 							gp_offset -
@@ -2704,8 +2916,8 @@ save_restore_insns (int prologue)
 
       /* Do not optimize in flow analysis.  */
       MEM_VOLATILE_P (isr_mem_rtx) = 1;
-      isr_reg_rtx = gen_rtx_REG (SImode, MB_ABI_MSR_SAVE_REG);
-      isr_msr_rtx = gen_rtx_REG (SImode, ST_REG);
+      isr_reg_rtx = gen_rtx_REG (Pmode, MB_ABI_MSR_SAVE_REG);
+      isr_msr_rtx = gen_rtx_REG (Pmode, ST_REG);
     }
 
   if (microblaze_is_interrupt_variant () && !prologue)
@@ -2713,8 +2925,8 @@ save_restore_insns (int prologue)
       emit_move_insn (isr_reg_rtx, isr_mem_rtx);
       emit_move_insn (isr_msr_rtx, isr_reg_rtx);
       /* Do not optimize in flow analysis.  */
-      emit_insn (gen_rtx_USE (SImode, isr_reg_rtx));
-      emit_insn (gen_rtx_USE (SImode, isr_msr_rtx));
+      emit_insn (gen_rtx_USE (Pmode, isr_reg_rtx));
+      emit_insn (gen_rtx_USE (Pmode, isr_msr_rtx));
     }
 
   for (regno = GP_REG_FIRST; regno <= GP_REG_LAST; regno++)
@@ -2725,9 +2937,9 @@ save_restore_insns (int prologue)
 	    /* Don't handle here. Already handled as the first register.  */
 	    continue;
 
-	  reg_rtx = gen_rtx_REG (SImode, regno);
+	  reg_rtx = gen_rtx_REG (Pmode, regno);
 	  insn = gen_rtx_PLUS (Pmode, base_reg_rtx, GEN_INT (gp_offset));
-	  mem_rtx = gen_rtx_MEM (SImode, insn);
+	  mem_rtx = gen_rtx_MEM (Pmode, insn);
 	  if (microblaze_is_interrupt_variant () || save_volatiles)
 	    /* Do not optimize in flow analysis.  */
 	    MEM_VOLATILE_P (mem_rtx) = 1;
@@ -2742,7 +2954,7 @@ save_restore_insns (int prologue)
 	      insn = emit_move_insn (reg_rtx, mem_rtx);
 	    }
 
-	  gp_offset += GET_MODE_SIZE (SImode);
+	  gp_offset += GET_MODE_SIZE (Pmode);
 	}
     }
 
@@ -2752,8 +2964,8 @@ save_restore_insns (int prologue)
       emit_move_insn (isr_mem_rtx, isr_reg_rtx);
 
       /* Do not optimize in flow analysis.  */
-      emit_insn (gen_rtx_USE (SImode, isr_reg_rtx));
-      emit_insn (gen_rtx_USE (SImode, isr_msr_rtx));
+      emit_insn (gen_rtx_USE (Pmode, isr_reg_rtx));
+      emit_insn (gen_rtx_USE (Pmode, isr_msr_rtx));
     }
 
   /* Done saving and restoring */
@@ -2843,7 +3055,10 @@ microblaze_elf_asm_cdtor (rtx symbol, int priority, bool is_ctor)
 
   switch_to_section (s);
   assemble_align (POINTER_SIZE);
-  fputs ("\t.word\t", asm_out_file);
+  if (TARGET_MB_64)
+    fputs ("\t.dword\t", asm_out_file);
+  else
+    fputs ("\t.word\t", asm_out_file);
   output_addr_const (asm_out_file, symbol);
   fputs ("\n", asm_out_file);
 }
@@ -2987,10 +3202,10 @@ microblaze_expand_prologue (void)
 	{
 	  if (offset != 0)
 	    ptr = gen_rtx_PLUS (Pmode, stack_pointer_rtx, GEN_INT (offset));
-	  emit_move_insn (gen_rtx_MEM (SImode, ptr),
-			  gen_rtx_REG (SImode, regno));
+	  emit_move_insn (gen_rtx_MEM (Pmode, ptr),
+			  gen_rtx_REG (Pmode, regno));
 
-	  offset += GET_MODE_SIZE (SImode);
+	  offset += GET_MODE_SIZE (Pmode);
 	}
     }
 
@@ -2999,23 +3214,31 @@ microblaze_expand_prologue (void)
       rtx fsiz_rtx = GEN_INT (fsiz);
 
       rtx_insn *insn = NULL;
-      insn = emit_insn (gen_subsi3 (stack_pointer_rtx, stack_pointer_rtx,
+         if (TARGET_MB_64)
+           {
+              
+             insn = emit_insn (gen_subdi3 (stack_pointer_rtx, stack_pointer_rtx,
 				    fsiz_rtx));
+           }
+         else { 
+             insn = emit_insn (gen_subsi3 (stack_pointer_rtx, stack_pointer_rtx,
+				    fsiz_rtx));
+           }
       if (insn)
 	RTX_FRAME_RELATED_P (insn) = 1;
 
       /* Handle SUB_RETURN_ADDR_REGNUM specially at first.  */
       if (!crtl->is_leaf || interrupt_handler)
 	{
-	  mem_rtx = gen_rtx_MEM (SImode,
+	  mem_rtx = gen_rtx_MEM (Pmode,
 				 gen_rtx_PLUS (Pmode, stack_pointer_rtx,
 					       const0_rtx));
 
-	  if (interrupt_handler)
+	  if (interrupt_handler || break_handler)
 	    /* Do not optimize in flow analysis.  */
 	    MEM_VOLATILE_P (mem_rtx) = 1;
 
-	  reg_rtx = gen_rtx_REG (SImode, MB_ABI_SUB_RETURN_ADDR_REGNUM);
+	  reg_rtx = gen_rtx_REG (Pmode, MB_ABI_SUB_RETURN_ADDR_REGNUM);
 	  insn = emit_move_insn (mem_rtx, reg_rtx);
 	  RTX_FRAME_RELATED_P (insn) = 1;
 	}
@@ -3122,15 +3345,15 @@ microblaze_expand_epilogue (void)
          a load-use stall cycle  :)   This is also important to handle alloca. 
          (See comments for if (frame_pointer_needed) below.  */
 
-      if (!crtl->is_leaf || interrupt_handler)
+      if (!crtl->is_leaf || interrupt_handler || break_handler)
 	{
 	  mem_rtx =
-	    gen_rtx_MEM (SImode,
+	    gen_rtx_MEM (Pmode,
 			 gen_rtx_PLUS (Pmode, stack_pointer_rtx, const0_rtx));
-	  if (interrupt_handler)
+	  if (interrupt_handler || break_handler)
 	    /* Do not optimize in flow analysis.  */
 	    MEM_VOLATILE_P (mem_rtx) = 1;
-	  reg_rtx = gen_rtx_REG (SImode, MB_ABI_SUB_RETURN_ADDR_REGNUM);
+	  reg_rtx = gen_rtx_REG (Pmode, MB_ABI_SUB_RETURN_ADDR_REGNUM);
 	  emit_move_insn (reg_rtx, mem_rtx);
 	}
 
@@ -3146,15 +3369,25 @@ microblaze_expand_epilogue (void)
       /* _restore_ registers for epilogue.  */
       save_restore_insns (0);
       emit_insn (gen_blockage ());
-      emit_insn (gen_addsi3 (stack_pointer_rtx, stack_pointer_rtx, fsiz_rtx));
+      if (TARGET_MB_64)
+        emit_insn (gen_adddi3 (stack_pointer_rtx, stack_pointer_rtx, fsiz_rtx));
+      else
+        emit_insn (gen_addsi3 (stack_pointer_rtx, stack_pointer_rtx, fsiz_rtx));
     }
 
   if (crtl->calls_eh_return)
-    emit_insn (gen_addsi3 (stack_pointer_rtx,
+      if (TARGET_MB_64) {
+          emit_insn (gen_adddi3 (stack_pointer_rtx,
                            stack_pointer_rtx,
-                           gen_raw_REG (SImode,
+                           gen_raw_REG (Pmode,
 					MB_EH_STACKADJ_REGNUM)));
-
+        }
+      else {
+          emit_insn (gen_addsi3 (stack_pointer_rtx,
+                           stack_pointer_rtx,
+                           gen_raw_REG (Pmode,
+					MB_EH_STACKADJ_REGNUM)));
+        }
   emit_jump_insn (gen_return_internal (gen_rtx_REG (Pmode, GP_REG_FIRST +
 						    MB_ABI_SUB_RETURN_ADDR_REGNUM)));
 }
@@ -3321,9 +3554,14 @@ microblaze_asm_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
   else
     this_rtx = gen_rtx_REG (Pmode, MB_ABI_FIRST_ARG_REGNUM);
 
-  /* Apply the constant offset, if required.  */
+  /* Apply the constant offset, if required. */ 
   if (delta)
-    emit_insn (gen_addsi3 (this_rtx, this_rtx, GEN_INT (delta)));
+    {
+      if (TARGET_MB_64)
+        emit_insn (gen_adddi3 (this_rtx, this_rtx, GEN_INT (delta))); 
+      else
+        emit_insn (gen_addsi3 (this_rtx, this_rtx, GEN_INT (delta)));
+    } 
 
   /* Apply the offset from the vtable, if required.  */
   if (vcall_offset)
@@ -3336,7 +3574,10 @@ microblaze_asm_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
     rtx loc = gen_rtx_PLUS (Pmode, temp1, vcall_offset_rtx);
     emit_move_insn (temp1, gen_rtx_MEM (Pmode, loc));
 
-    emit_insn (gen_addsi3 (this_rtx, this_rtx, temp1));
+    if (TARGET_MB_64)
+      emit_insn (gen_adddi3 (this_rtx, this_rtx, temp1));
+    else
+      emit_insn (gen_addsi3 (this_rtx, this_rtx, temp1));
   }
 
   /* Generate a tail call to the target function.  */
@@ -3378,11 +3619,11 @@ microblaze_expand_move (machine_mode mode, rtx operands[])
   op0 = operands[0];
   op1 = operands[1];
 
-  if (!register_operand (op0, SImode)
-      && !register_operand (op1, SImode)
+  if (!register_operand (op0, mode)
+      && !register_operand (op1, mode)
       && (GET_CODE (op1) != CONST_INT || INTVAL (op1) != 0))
     {
-      rtx temp = force_reg (SImode, op1);
+      rtx temp = force_reg (mode, op1);
       emit_move_insn (op0, temp);
       return true;
     }
@@ -3447,12 +3688,12 @@ microblaze_expand_move (machine_mode mode, rtx operands[])
 	          && (flag_pic == 2 || microblaze_tls_symbol_p (p0)
 		      || !SMALL_INT (p1)))))
 	{
-	  rtx temp = force_reg (SImode, p0);
+	  rtx temp = force_reg (mode, p0);
 	  rtx temp2 = p1;
 
 	  if (flag_pic && reload_in_progress)
 	    df_set_regs_ever_live (PIC_OFFSET_TABLE_REGNUM, true);
-	  emit_move_insn (op0, gen_rtx_PLUS (SImode, temp, temp2));
+	  emit_move_insn (op0, gen_rtx_PLUS (mode, temp, temp2));
 	  return true;
 	}
     }
@@ -3567,9 +3808,9 @@ microblaze_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
   emit_block_move (m_tramp, assemble_trampoline_template (),
 		   GEN_INT (6*UNITS_PER_WORD), BLOCK_OP_NORMAL);
 
-  mem = adjust_address (m_tramp, SImode, 16);
+  mem = adjust_address (m_tramp, Pmode, 16);
   emit_move_insn (mem, chain_value);
-  mem = adjust_address (m_tramp, SImode, 20);
+  mem = adjust_address (m_tramp, Pmode, 20);
   emit_move_insn (mem, fnaddr);
 }
 
@@ -3583,7 +3824,7 @@ microblaze_expand_conditional_branch (machine_mode mode, rtx operands[])
   rtx cmp_op0 = operands[1];
   rtx cmp_op1 = operands[2];
   rtx label1 = operands[3];
-  rtx comp_reg = gen_reg_rtx (SImode);
+  rtx comp_reg = gen_reg_rtx (mode);
   rtx condition;
 
   gcc_assert ((GET_CODE (cmp_op0) == REG) || (GET_CODE (cmp_op0) == SUBREG));
@@ -3592,15 +3833,18 @@ microblaze_expand_conditional_branch (machine_mode mode, rtx operands[])
   if (cmp_op1 == const0_rtx)
     {
       comp_reg = cmp_op0;
-      condition = gen_rtx_fmt_ee (signed_condition (code), SImode, comp_reg, const0_rtx);
+      condition = gen_rtx_fmt_ee (signed_condition (code), mode, comp_reg, const0_rtx);
       emit_jump_insn (gen_condjump (condition, label1));
     }
 
   else if (code == EQ || code == NE)
     {
       /* Use xor for equal/not-equal comparison.  */
-      emit_insn (gen_xorsi3 (comp_reg, cmp_op0, cmp_op1));
-      condition = gen_rtx_fmt_ee (signed_condition (code), SImode, comp_reg, const0_rtx);
+      if (mode == SImode)
+        emit_insn (gen_xorsi3 (comp_reg, cmp_op0, cmp_op1));
+      else
+        emit_insn (gen_xordi3 (comp_reg, cmp_op0, cmp_op1));
+      condition = gen_rtx_fmt_ee (signed_condition (code), mode, comp_reg, const0_rtx);
       emit_jump_insn (gen_condjump (condition, label1));
     }
   else
@@ -3608,7 +3852,10 @@ microblaze_expand_conditional_branch (machine_mode mode, rtx operands[])
       /* Generate compare and branch in single instruction. */
       cmp_op1 = force_reg (mode, cmp_op1);
       condition = gen_rtx_fmt_ee (code, mode, cmp_op0, cmp_op1);
-      emit_jump_insn (gen_branch_compare(condition, cmp_op0, cmp_op1, label1));
+      if (mode == SImode)
+        emit_jump_insn (gen_branch_compare(condition, cmp_op0, cmp_op1, label1));
+      else
+        emit_jump_insn (gen_long_branch_compare(condition, cmp_op0, cmp_op1, label1));
     }
 }
 
@@ -3619,7 +3866,7 @@ microblaze_expand_conditional_branch_reg (machine_mode mode, rtx operands[])
   rtx cmp_op0 = operands[1];
   rtx cmp_op1 = operands[2];
   rtx label1 = operands[3];
-  rtx comp_reg = gen_reg_rtx (SImode);
+  rtx comp_reg = gen_reg_rtx (mode);
   rtx condition;
 
   gcc_assert ((GET_CODE (cmp_op0) == REG)
@@ -3630,21 +3877,38 @@ microblaze_expand_conditional_branch_reg (machine_mode mode, rtx operands[])
     {
       comp_reg = cmp_op0;
       condition = gen_rtx_fmt_ee (signed_condition (code),
-                                  SImode, comp_reg, const0_rtx);
+                                  mode, comp_reg, const0_rtx);
       emit_jump_insn (gen_condjump (condition, label1));
     }
   else if (code == EQ)
     {
-      emit_insn (gen_seq_internal_pat (comp_reg,
-                                       cmp_op0, cmp_op1));
-      condition = gen_rtx_EQ (SImode, comp_reg, const0_rtx);
+      if (mode == SImode)
+        {
+          emit_insn (gen_seq_internal_pat (comp_reg, cmp_op0,
+                                           cmp_op1));
+	}
+      else
+        {
+          emit_insn (gen_seq_internal_pat (comp_reg, cmp_op0,
+                                           cmp_op1));
+	}
+      condition = gen_rtx_EQ (mode, comp_reg, const0_rtx);
       emit_jump_insn (gen_condjump (condition, label1));
+ 
     }
   else if (code == NE)
     {
-      emit_insn (gen_sne_internal_pat (comp_reg, cmp_op0,
-                                       cmp_op1));
-      condition = gen_rtx_NE (SImode, comp_reg, const0_rtx);
+      if (mode == SImode)
+        {
+          emit_insn (gen_sne_internal_pat (comp_reg, cmp_op0,
+                                           cmp_op1));
+	}
+      else
+        {
+          emit_insn (gen_sne_internal_pat (comp_reg, cmp_op0,
+                                           cmp_op1));
+	}
+      condition = gen_rtx_NE (mode, comp_reg, const0_rtx);
       emit_jump_insn (gen_condjump (condition, label1));
     }
   else
@@ -3652,8 +3916,15 @@ microblaze_expand_conditional_branch_reg (machine_mode mode, rtx operands[])
       /* Generate compare and branch in single instruction. */
       cmp_op1 = force_reg (mode, cmp_op1);
       condition = gen_rtx_fmt_ee (code, mode, cmp_op0, cmp_op1);
-      emit_jump_insn (gen_branch_compare (condition, cmp_op0,
-                                         cmp_op1, label1));
+      if (mode == SImode)
+        emit_jump_insn (gen_branch_compare (condition, cmp_op0,
+                                           cmp_op1, label1));
+      else 
+	{
+          emit_jump_insn (gen_long_branch_compare (condition, cmp_op0,
+                                             cmp_op1, label1));
+        }	
+
     }
 }
 
@@ -3666,7 +3937,20 @@ microblaze_expand_conditional_branch_sf (rtx operands[])
   rtx comp_reg = gen_reg_rtx (SImode);
 
   emit_insn (gen_cstoresf4 (comp_reg, operands[0], cmp_op0, cmp_op1));
-  condition = gen_rtx_NE (SImode, comp_reg, const0_rtx);
+  condition = gen_rtx_NE (Pmode, comp_reg, const0_rtx);
+  emit_jump_insn (gen_condjump (condition, operands[3]));
+}
+
+void
+microblaze_expand_conditional_branch_df (rtx operands[])
+{
+  rtx condition;
+  rtx cmp_op0 = XEXP (operands[0], 0);
+  rtx cmp_op1 = XEXP (operands[0], 1);
+  rtx comp_reg = gen_reg_rtx (Pmode);
+
+  emit_insn (gen_cstoredf4 (comp_reg, operands[0], cmp_op0, cmp_op1));
+  condition = gen_rtx_NE (Pmode, comp_reg, const0_rtx);
   emit_jump_insn (gen_condjump (condition, operands[3]));
 }
 
@@ -3687,8 +3971,8 @@ microblaze_expand_divide (rtx operands[])
 {
   /* Table lookup software divides. Works for all (nr/dr) where (0 <= nr,dr <= 15).  */
 
-  rtx regt1 = gen_reg_rtx (SImode); 
-  rtx reg18 = gen_rtx_REG (SImode, R_TMP);
+  rtx regt1 = gen_reg_rtx (Pmode); 
+  rtx reg18 = gen_rtx_REG (Pmode, R_TMP);
   rtx regqi = gen_reg_rtx (QImode);
   rtx_code_label *div_label = gen_label_rtx ();
   rtx_code_label *div_end_label = gen_label_rtx ();
@@ -3696,23 +3980,39 @@ microblaze_expand_divide (rtx operands[])
   rtx mem_rtx;
   rtx ret;
   rtx_insn *jump, *cjump, *insn;
-
-  insn = emit_insn (gen_iorsi3 (regt1, operands[1], operands[2]));
-  cjump = emit_jump_insn_after (gen_cbranchsi4 (
-					gen_rtx_GTU (SImode, regt1, GEN_INT (15)), 
+ 
+  if (TARGET_MB_64) {
+      insn = emit_insn (gen_iordi3 (regt1, operands[1], operands[2]));
+      cjump = emit_jump_insn_after (gen_cbranchdi4 (
+					gen_rtx_GTU (Pmode, regt1, GEN_INT (15)), 
 					regt1, GEN_INT (15), div_label), insn);
+    }
+  else {
+      insn = emit_insn (gen_iorsi3 (regt1, operands[1], operands[2]));
+      cjump = emit_jump_insn_after (gen_cbranchsi4 (
+					gen_rtx_GTU (Pmode, regt1, GEN_INT (15)), 
+					regt1, GEN_INT (15), div_label), insn);
+    }
   LABEL_NUSES (div_label) = 1; 
   JUMP_LABEL (cjump) = div_label;
-  emit_insn (gen_rtx_CLOBBER (SImode, reg18));
+  emit_insn (gen_rtx_CLOBBER (Pmode, reg18));
 
-  emit_insn (gen_ashlsi3_bshift (regt1, operands[1], GEN_INT(4)));
-  emit_insn (gen_addsi3 (regt1, regt1, operands[2]));
+  if (TARGET_MB_64) {
+      emit_insn (gen_ashldi3 (regt1, operands[1], GEN_INT(4)));
+      emit_insn (gen_adddi3 (regt1, regt1, operands[2]));
+    }
+  else  {
+      emit_insn (gen_ashlsi3_bshift (regt1, operands[1], GEN_INT(4)));
+      emit_insn (gen_addsi3 (regt1, regt1, operands[2]));
+    }
   mem_rtx = gen_rtx_MEM (QImode,
-                            gen_rtx_PLUS (Pmode, regt1, div_table_rtx));
+                            gen_rtx_PLUS (QImode, regt1, div_table_rtx));
 
-  insn = emit_insn (gen_movqi (regqi, mem_rtx)); 
-  insn = emit_insn (gen_movsi (operands[0], gen_rtx_SUBREG (SImode, regqi, 0)));
-  jump = emit_jump_insn_after (gen_jump (div_end_label), insn); 
+  insn = emit_insn (gen_zero_extendqisi2(operands[0],mem_rtx));
+  if (TARGET_MB_64) 
+    jump = emit_jump_insn_after (gen_jump_64 (div_end_label), insn);
+  else 
+    jump = emit_jump_insn_after (gen_jump (div_end_label), insn); 
   JUMP_LABEL (jump) = div_end_label;
   LABEL_NUSES (div_end_label) = 1; 
   emit_barrier ();
@@ -3736,7 +4036,16 @@ microblaze_function_value (const_tree valtype,
 			   const_tree func ATTRIBUTE_UNUSED,
 			   bool outgoing ATTRIBUTE_UNUSED)
 {
-  return LIBCALL_VALUE (TYPE_MODE (valtype));
+  return gen_rtx_REG (TYPE_MODE (valtype), GP_RETURN);
+}
+
+#undef  TARGET_LIBCALL_VALUE
+#define TARGET_LIBCALL_VALUE microblaze_libcall_value
+
+rtx
+microblaze_libcall_value (machine_mode mode, const_rtx fun ATTRIBUTE_UNUSED)
+{
+  return gen_rtx_REG (mode, GP_RETURN);
 }
 
 /* Implement TARGET_SCHED_ADJUST_COST.  */
@@ -3854,7 +4163,7 @@ insert_wic_for_ilb_runout (rtx_insn *first)
               {
                 insn =
                   emit_insn_before (gen_iprefetch
-                                    (gen_int_mode (addr_offset, SImode)),
+                                    (gen_int_mode (addr_offset, Pmode)),
                                     before_4);
                 recog_memoized (insn);
                 INSN_LOCATION (insn) = INSN_LOCATION (before_4);
@@ -3864,7 +4173,27 @@ insert_wic_for_ilb_runout (rtx_insn *first)
            }
        }
 }
-
+  
+/* Set the names for various arithmetic operations according to the
+ *    MICROBLAZE ABI.  */
+static void
+microblaze_init_libfuncs (void)
+{ 
+  set_optab_libfunc (smod_optab,     SImode, "__modsi3");
+  set_optab_libfunc (sdiv_optab,     SImode, "__divsi3");
+  set_optab_libfunc (smul_optab,     SImode, "__mulsi3");
+  set_optab_libfunc (umod_optab,     SImode, "__umodsi3");
+  set_optab_libfunc (udiv_optab,     SImode, "__udivsi3");
+  
+  if (TARGET_MB_64)
+    {
+      set_optab_libfunc (smod_optab,     DImode, "__moddi3");
+      set_optab_libfunc (sdiv_optab,     DImode, "__divdi3");
+      set_optab_libfunc (smul_optab,     DImode, "__muldi3");
+      set_optab_libfunc (umod_optab,     DImode, "__umoddi3");
+      set_optab_libfunc (udiv_optab,     DImode, "__udivdi3");
+    }
+}       
 /* Insert instruction prefetch instruction at the fall
    through path of the function call.  */
 
@@ -3977,6 +4306,12 @@ microblaze_starting_frame_offset (void)
 #undef TARGET_ATTRIBUTE_TABLE
 #define TARGET_ATTRIBUTE_TABLE          microblaze_attribute_table
 
+#undef TARGET_ASM_CONSTRUCTOR
+#define TARGET_ASM_CONSTRUCTOR          microblaze_asm_constructor
+
+#undef TARGET_ASM_DESTRUCTOR
+#define TARGET_ASM_DESTRUCTOR           microblaze_asm_destructor
+
 #undef TARGET_IN_SMALL_DATA_P
 #define TARGET_IN_SMALL_DATA_P          microblaze_elf_in_small_data_p
 
@@ -4011,6 +4346,17 @@ microblaze_starting_frame_offset (void)
 #undef TARGET_LRA_P
 #define TARGET_LRA_P hook_bool_void_false
 
+#ifdef TARGET_MB_64
+#undef TARGET_ASM_ALIGNED_DI_OP
+#define TARGET_ASM_ALIGNED_DI_OP "\t.dword\t"
+
+#undef TARGET_ASM_ALIGNED_HI_OP
+#define TARGET_ASM_ALIGNED_HI_OP "\t.hword\t"
+
+#undef TARGET_ASM_ALIGNED_SI_OP
+#define TARGET_ASM_ALIGNED_SI_OP "\t.word\t"
+#endif
+
 #undef TARGET_FRAME_POINTER_REQUIRED
 #define TARGET_FRAME_POINTER_REQUIRED	microblaze_frame_pointer_required
 
@@ -4019,6 +4365,9 @@ microblaze_starting_frame_offset (void)
 
 #undef  TARGET_TRAMPOLINE_INIT
 #define TARGET_TRAMPOLINE_INIT		microblaze_trampoline_init
+
+#undef TARGET_INIT_LIBFUNCS
+#define TARGET_INIT_LIBFUNCS microblaze_init_libfuncs
 
 #undef  TARGET_PROMOTE_FUNCTION_MODE
 #define TARGET_PROMOTE_FUNCTION_MODE 	default_promote_function_mode_always_promote

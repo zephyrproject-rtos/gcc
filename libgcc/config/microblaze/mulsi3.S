@@ -41,6 +41,39 @@
 	.globl	__mulsi3
 	.ent	__mulsi3
 	.type	__mulsi3,@function
+#ifdef __arch64__
+        .align 3
+__mulsi3:
+        .frame  r1,0,r15
+        add     r3,r0,r0
+        BEAEQI    r5,$L_Result_Is_Zero      # Multiply by Zero
+        BEAEQI    r6,$L_Result_Is_Zero      # Multiply by Zero
+        BEAGEId   r5,$L_R5_Pos
+        XOR     r4,r5,r6                  # Get the sign of the result
+        RSUBI   r5,r5,0                   # Make r5 positive
+$L_R5_Pos:
+        BEAGEI    r6,$L_R6_Pos
+        RSUBI   r6,r6,0                   # Make r6 positive
+$L_R6_Pos:
+        breai     $L1
+$L2:
+        add     r5,r5,r5
+$L1:
+        srl     r6,r6
+        addc    r7,r0,r0
+        beaeqi    r7,$L2
+        beaneid   r6,$L2
+        add     r3,r3,r5
+        bealti    r4,$L_NegateResult
+        rtsd    r15,8
+        nop
+$L_NegateResult:
+        rtsd    r15,8
+        rsub    r3,r3,r0
+$L_Result_Is_Zero:
+        rtsd    r15,8
+        addi    r3,r0,0
+#else
 __mulsi3:
 	.frame	r1,0,r15
 	add	r3,r0,r0
@@ -71,5 +104,6 @@ $L_NegateResult:
 $L_Result_Is_Zero:
 	rtsd	r15,8
 	addi	r3,r0,0
+#endif
 	.end __mulsi3
 	.size	__mulsi3, . - __mulsi3
