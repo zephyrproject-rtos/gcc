@@ -1,0 +1,47 @@
+# Copyright (C) 2002-2024 Free Software Foundation, Inc.
+#
+# This file is part of GCC.
+#
+# GCC is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3, or (at your option)
+# any later version.
+#
+# GCC is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GCC; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+
+TM_H += $(srcdir)/../include/xtensa-config.h \
+	$(srcdir)/../include/xtensa-dynconfig.h
+$(out_object_file): gt-xtensa.h
+
+xtensa-dynconfig.o: $(srcdir)/config/xtensa/xtensa-dynconfig.cc
+	$(COMPILE) $<
+	$(POSTCOMPILE)
+
+XTENSA_CONFIG_H = $(srcdir)/ginclude/core-isa.h
+
+stmp-xtensa-int-hdrs: $(XTENSA_CONFIG_H)
+	-if [ -d include ] ; then true; else mkdir include; chmod a+rx include; fi
+	-if [ -d include/xtensa ] ; then true; else mkdir include/xtensa; chmod a+rx include/xtensa; fi
+	-if [ -d include/xtensa/config ] ; then true; else mkdir include/xtensa/config; chmod a+rx include/xtensa/config; fi
+	for file in .. $(XTENSA_CONFIG_H); do \
+	  if [ X$$file != X.. ]; then \
+	    realfile=`echo $$file | sed -e 's|.*/\([^/]*\)$$|\1|'`; \
+	    $(STAMP) include/xtensa/config/$$realfile; \
+	    rm -f include/xtensa/config/$$realfile; \
+	    cp $$file include/xtensa/config; \
+	    chmod a+r include/xtensa/config/$$realfile; \
+	  fi; \
+	done
+	$(STAMP) $@
+
+stmp-int-hdrs: stmp-xtensa-int-hdrs
+
+MULTILIB_OPTIONS += mabi=call0/mabi=windowed
+MULTILIB_DIRNAMES += call0 windowed
