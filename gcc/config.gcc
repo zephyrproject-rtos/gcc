@@ -3600,6 +3600,11 @@ xstormy16-*-elf)
 	extra_options=stormy16/stormy16.opt
 	tmake_file="stormy16/t-stormy16"
 	;;
+xtensa*-*_zephyr-elf*)
+	tm_file="${tm_file} elfos.h newlib-stdint.h xtensa/zephyr.h"
+	extra_options="${extra_options} xtensa/elf.opt"
+	tmake_file="${tmake_file} xtensa/t-zephyr"
+	;;
 xtensa*-*-elf*)
 	tm_file="${tm_file} elfos.h newlib-stdint.h xtensa/elf.h"
 	extra_options="${extra_options} xtensa/elf.opt"
