@@ -1345,6 +1345,8 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
   ac_has_clock_realtime=no
   ac_has_nanosleep=no
   ac_has_sched_yield=no
+  ac_has_sleep=no
+  ac_has_usleep=no
 
   if test x"$enable_libstdcxx_time" = x"auto"; then
 
@@ -1394,6 +1396,17 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
       uclinux*)
         ac_has_nanosleep=yes
         ac_has_sched_yield=yes
+    esac
+    
+    case "${target}" in
+      *zephyr*)
+        ac_has_clock_monotonic=yes
+        ac_has_clock_realtime=yes
+        ac_has_nanosleep=yes
+        ac_has_sched_yield=yes
+        ac_has_sleep=yes
+        ac_has_usleep=yes
+        ;;
     esac
 
   elif test x"$enable_libstdcxx_time" != x"no"; then
@@ -1589,12 +1602,19 @@ AC_DEFUN([GLIBCXX_CHECK_GETTIMEOFDAY], [
 
   AC_MSG_CHECKING([for gettimeofday])
 
+  ac_has_gettimeofday=no
+  case "${target}" in
+    *zephyr*)
+      ac_has_gettimeofday=yes
+      ;;
+  esac
+
   AC_LANG_SAVE
   AC_LANG_CPLUSPLUS
   ac_save_CXXFLAGS="$CXXFLAGS"
   CXXFLAGS="$CXXFLAGS -fno-exceptions"
 
-  ac_has_gettimeofday=no;
+  if test x"$ac_has_gettimeofday" != x"yes"; then
   AC_CHECK_HEADERS(sys/time.h, ac_has_sys_time_h=yes, ac_has_sys_time_h=no)
   if test x"$ac_has_sys_time_h" = x"yes"; then
     AC_MSG_CHECKING([for gettimeofday])
@@ -1603,6 +1623,7 @@ AC_DEFUN([GLIBCXX_CHECK_GETTIMEOFDAY], [
       [ac_has_gettimeofday=yes], [ac_has_gettimeofday=no])
 
     AC_MSG_RESULT($ac_has_gettimeofday)
+  fi
   fi
 
   if test x"$ac_has_gettimeofday" = x"yes"; then
@@ -3964,6 +3985,24 @@ dnl
 AC_DEFUN([GLIBCXX_CHECK_GTHREADS], [
   GLIBCXX_ENABLE(libstdcxx-threads,auto,,[enable C++11 threads support])
 
+  runtests=yes
+  ac_gthread_use_mutex_timedlock=no
+  ac_has_gthreads=no
+  ac_gthread_use_pthreads=no
+  ac_have_posix_semaphore=no
+  ac_gthread_use_pthreads_rwlock_t=no
+
+  case "${target}" in
+  *zephyr*)
+    runtests=no
+    ac_gthread_use_mutex_timedlock=yes
+    ac_has_gthreads=yes
+    ac_gthread_use_pthreads=yes
+    ac_have_posix_semaphore=yes
+    ac_gthread_use_pthreads_rwlock_t=yes
+    ;;
+  esac
+
   if test x$enable_libstdcxx_threads = xauto ||
      test x$enable_libstdcxx_threads = xyes; then
 
@@ -3982,6 +4021,7 @@ AC_DEFUN([GLIBCXX_CHECK_GTHREADS], [
 
   AC_MSG_CHECKING([whether it can be safely assumed that mutex_timedlock is available])
 
+  if x"$runtests" = x"yes"; then
   AC_TRY_COMPILE([#include <unistd.h>],
     [
       // In case of POSIX threads check _POSIX_TIMEOUTS.
@@ -3990,6 +4030,7 @@ AC_DEFUN([GLIBCXX_CHECK_GTHREADS], [
       #error
       #endif
     ], [ac_gthread_use_mutex_timedlock=1], [ac_gthread_use_mutex_timedlock=0])
+  fi
 
   AC_DEFINE_UNQUOTED(_GTHREAD_USE_MUTEX_TIMEDLOCK, $ac_gthread_use_mutex_timedlock,
 		     [Define to 1 if mutex_timedlock is available.])
@@ -4000,6 +4041,7 @@ AC_DEFUN([GLIBCXX_CHECK_GTHREADS], [
 
   AC_MSG_CHECKING([for gthreads library])
 
+  if x"$runtests" = x"yes"; then
   AC_TRY_COMPILE([#include "gthr.h"],
     [
       #ifndef __GTHREADS_CXX0X
@@ -4008,6 +4050,7 @@ AC_DEFUN([GLIBCXX_CHECK_GTHREADS], [
     ], [ac_has_gthreads=yes], [ac_has_gthreads=no])
   else
     ac_has_gthreads=no
+  fi
   fi
 
   AC_MSG_RESULT([$ac_has_gthreads])
@@ -4021,21 +4064,31 @@ AC_DEFUN([GLIBCXX_CHECK_GTHREADS], [
     # On VxWorks for example, pthread_rwlock_t is defined in sys/types.h
     # but the pthread library is not there by default and the gthread library
     # does not use it.
+    if x"$runtests" = x"yes"; then
     AC_TRY_COMPILE([#include "gthr.h"],
     [
       #if (!defined(_PTHREADS))
       #error
       #endif
     ], [ac_gthread_use_pthreads=yes], [ac_gthread_use_pthreads=no])
+    fi
     if test x"$ac_gthread_use_pthreads" = x"yes"; then
+      if x"$runtests" = x"yes"; then
       AC_CHECK_TYPE([pthread_rwlock_t],
              [AC_DEFINE([_GLIBCXX_USE_PTHREAD_RWLOCK_T], 1,
              [Define if POSIX read/write locks are available in <gthr.h>.])],
              [],
              [#include "gthr.h"])
+      else
+        if x"$ac_gthread_use_pthreads_rwlock_t" = x"yes"; then
+          AC_DEFINE([_GLIBCXX_USE_PTHREAD_RWLOCK_T], 1,
+            [Define if POSIX read/write locks are available in <gthr.h>.])
+        fi
+      fi
     fi
   fi
 
+  if x"$runtests" = x"yes"; then
   AC_CHECK_HEADER(semaphore.h, [
     AC_MSG_CHECKING([for POSIX Semaphores and sem_timedwait])
     AC_TRY_COMPILE([
@@ -4065,6 +4118,7 @@ AC_DEFUN([GLIBCXX_CHECK_GTHREADS], [
       [ac_have_posix_semaphore=yes],
       [ac_have_posix_semaphore=no])],
       [ac_have_posix_semaphore=no])
+  fi
 
   if test $ac_have_posix_semaphore = yes ; then
     AC_DEFINE(HAVE_POSIX_SEMAPHORE,
