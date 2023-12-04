@@ -20396,6 +20396,17 @@ fi
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for gettimeofday" >&5
 $as_echo_n "checking for gettimeofday... " >&6; }
 
+  runtests=yes
+  ac_has_gettimeofday=no
+  ac_has_sys_time_h=no
+
+  case "${target}" in
+    *zephyr*)
+      runtests=no
+      ac_has_gettimeofday=yes
+      ac_has_sys_time_h=yes
+      ;;
+  esac
 
   ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
@@ -20406,7 +20417,7 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
   ac_save_CXXFLAGS="$CXXFLAGS"
   CXXFLAGS="$CXXFLAGS -fno-exceptions"
 
-  ac_has_gettimeofday=no;
+  if test x"$runtests" = x"yes"; then
   for ac_header in sys/time.h
 do :
   ac_fn_cxx_check_header_mongrel "$LINENO" "sys/time.h" "ac_cv_header_sys_time_h" "$ac_includes_default"
@@ -20420,10 +20431,12 @@ else
 fi
 
 done
+fi
 
   if test x"$ac_has_sys_time_h" = x"yes"; then
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for gettimeofday" >&5
 $as_echo_n "checking for gettimeofday... " >&6; }
+    if test x"$runtests" = x"yes"; then
     if test x$gcc_no_link = xyes; then
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -20465,10 +20478,11 @@ fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
 fi
+fi
+fi
 
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_has_gettimeofday" >&5
 $as_echo "$ac_has_gettimeofday" >&6; }
-  fi
 
   if test x"$ac_has_gettimeofday" = x"yes"; then
 
@@ -20517,6 +20531,8 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
   ac_has_clock_realtime=no
   ac_has_nanosleep=no
   ac_has_sched_yield=no
+  ac_has_sleep=no
+  ac_has_usleep=no
 
   if test x"$enable_libstdcxx_time" = x"auto"; then
 
@@ -20624,6 +20640,17 @@ fi
       uclinux*)
         ac_has_nanosleep=yes
         ac_has_sched_yield=yes
+    esac
+
+    case "${target}" in
+      *zephyr*)
+        ac_has_clock_monotonic=yes
+        ac_has_clock_realtime=yes
+        ac_has_nanosleep=yes
+        ac_has_sched_yield=yes
+        ac_has_sleep=yes
+        ac_has_usleep=yes
+        ;;
     esac
 
   elif test x"$enable_libstdcxx_time" != x"no"; then
@@ -76041,6 +76068,23 @@ else
 fi
 
 
+  runtests=yes
+  ac_gthread_use_mutex_timedlock=no
+  ac_has_gthreads=no
+  ac_gthread_use_pthreads=no
+  ac_have_posix_semaphore=no
+  ac_gthread_use_pthreads_rwlock_t=no
+
+  case "${target}" in
+  *zephyr*)
+    runtests=no
+    ac_gthread_use_mutex_timedlock=yes
+    ac_has_gthreads=yes
+    ac_gthread_use_pthreads=yes
+    ac_have_posix_semaphore=yes
+    ac_gthread_use_pthreads_rwlock_t=yes
+    ;;
+  esac
 
   if test x$enable_libstdcxx_threads = xauto ||
      test x$enable_libstdcxx_threads = xyes; then
@@ -76066,6 +76110,7 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether it can be safely assumed that mutex_timedlock is available" >&5
 $as_echo_n "checking whether it can be safely assumed that mutex_timedlock is available... " >&6; }
 
+  if x"$runtests" = x"yes"; then
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <unistd.h>
@@ -76089,6 +76134,7 @@ else
   ac_gthread_use_mutex_timedlock=0
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+fi
 
 
 cat >>confdefs.h <<_ACEOF
@@ -76104,6 +76150,7 @@ $as_echo "$res_mutex_timedlock" >&6; }
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for gthreads library" >&5
 $as_echo_n "checking for gthreads library... " >&6; }
 
+  if x"$runtests" = x"yes"; then
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include "gthr.h"
@@ -76128,6 +76175,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
   else
     ac_has_gthreads=no
   fi
+  fi
 
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_has_gthreads" >&5
 $as_echo "$ac_has_gthreads" >&6; }
@@ -76142,6 +76190,7 @@ $as_echo "#define _GLIBCXX_HAS_GTHREADS 1" >>confdefs.h
     # On VxWorks for example, pthread_rwlock_t is defined in sys/types.h
     # but the pthread library is not there by default and the gthread library
     # does not use it.
+    if x"$runtests" = x"yes"; then
     cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include "gthr.h"
@@ -76163,7 +76212,9 @@ else
   ac_gthread_use_pthreads=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+    fi
     if test x"$ac_gthread_use_pthreads" = x"yes"; then
+      if x"$runtests" = x"yes"; then
       ac_fn_cxx_check_type "$LINENO" "pthread_rwlock_t" "ac_cv_type_pthread_rwlock_t" "#include \"gthr.h\"
 "
 if test "x$ac_cv_type_pthread_rwlock_t" = xyes; then :
@@ -76171,10 +76222,17 @@ if test "x$ac_cv_type_pthread_rwlock_t" = xyes; then :
 $as_echo "#define _GLIBCXX_USE_PTHREAD_RWLOCK_T 1" >>confdefs.h
 
 fi
+      else
+if test "x$ac_cv_type_pthread_rwlock_t" = xyes; then :
 
+$as_echo "#define _GLIBCXX_USE_PTHREAD_RWLOCK_T 1" >>confdefs.h
+
+fi
+      fi
     fi
   fi
 
+  if x"$runtests" = x"yes"; then
   ac_fn_cxx_check_header_mongrel "$LINENO" "semaphore.h" "ac_cv_header_semaphore_h" "$ac_includes_default"
 if test "x$ac_cv_header_semaphore_h" = xyes; then :
 
@@ -76221,6 +76279,7 @@ fi
 rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 else
   ac_have_posix_semaphore=no
+fi
 fi
 
 

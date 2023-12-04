@@ -1397,7 +1397,7 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
         ac_has_nanosleep=yes
         ac_has_sched_yield=yes
     esac
-    
+
     case "${target}" in
       *zephyr*)
         ac_has_clock_monotonic=yes
@@ -1602,10 +1602,15 @@ AC_DEFUN([GLIBCXX_CHECK_GETTIMEOFDAY], [
 
   AC_MSG_CHECKING([for gettimeofday])
 
+  runtests=yes
   ac_has_gettimeofday=no
+  ac_has_sys_time_h=no
+
   case "${target}" in
     *zephyr*)
+      runtests=no
       ac_has_gettimeofday=yes
+      ac_has_sys_time_h=yes
       ;;
   esac
 
@@ -1614,13 +1619,17 @@ AC_DEFUN([GLIBCXX_CHECK_GETTIMEOFDAY], [
   ac_save_CXXFLAGS="$CXXFLAGS"
   CXXFLAGS="$CXXFLAGS -fno-exceptions"
 
-  if test x"$ac_has_gettimeofday" != x"yes"; then
+  if test x"$runtests" = x"yes"; then
   AC_CHECK_HEADERS(sys/time.h, ac_has_sys_time_h=yes, ac_has_sys_time_h=no)
+  fi
+
   if test x"$ac_has_sys_time_h" = x"yes"; then
     AC_MSG_CHECKING([for gettimeofday])
+    if test x"$runtests" = x"yes"; then
     GCC_TRY_COMPILE_OR_LINK([#include <sys/time.h>],
       [timeval tv; gettimeofday(&tv, 0);],
       [ac_has_gettimeofday=yes], [ac_has_gettimeofday=no])
+    fi
 
     AC_MSG_RESULT($ac_has_gettimeofday)
   fi
