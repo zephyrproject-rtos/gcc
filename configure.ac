@@ -211,6 +211,14 @@ else
   is_cross_compiler=yes
 fi	
 
+# required for gthr-posix.h support in Zephyr
+case "${target}" in
+  *zephyr*)
+    CFLAGS="$CFLAGS -include `realpath $srcdir/libgcc/zephyr-bits.h`"
+    CXXFLAGS="$CXXFLAGS -include `realpath $srcdir/libgcc/zephyr-bits.h`"
+    ;;
+esac
+
 # Find the build and target subdir names.
 GCC_TOPLEV_SUBDIRS
 # Be sure to cover against remnants of an in-tree build.
