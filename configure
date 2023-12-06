@@ -2877,6 +2877,14 @@ else
   is_cross_compiler=yes
 fi
 
+# required for gthr-posix.h support in Zephyr
+case "${target}" in
+  *zephyr*)
+    CFLAGS="$CFLAGS -include `realpath $srcdir/libgcc/zephyr-bits.h`"
+    CXXFLAGS="$CXXFLAGS -include `realpath $srcdir/libgcc/zephyr-bits.h`"
+    ;;
+esac
+
 # Find the build and target subdir names.
 
 # post-stage1 host modules use a different CC_FOR_BUILD so, in order to
