@@ -7,6 +7,7 @@ MULTILIB_SRC_ARCH += rv32ima_zicsr_zifencei_zba_zbb_zbc_zbs
 MULTILIB_SRC_ARCH += rv32imac_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv32imac_zicsr_zifencei_zba_zbb_zbc_zbs
 MULTILIB_SRC_ARCH += rv32imafc_zicsr_zifencei
+MULTILIB_SRC_ARCH += rv32imfc_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv32imafd_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv32imafdc_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv32imc_zicsr_zifencei
@@ -39,6 +40,8 @@ MULTILIB_SRC_ARCH += rv64imafd_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64imafdc_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64imc_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64imc_zicsr_zifencei_zba_zbb_zbc_zbs
+MULTILIB_SRC_ARCH += rv64imfc_zicsr_zifencei
+MULTILIB_SRC_ARCH += rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs
 MULTILIB_SRC_ARCH += rv64ia_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64iac_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64ic_zicsr_zifencei
@@ -50,6 +53,7 @@ MULTILIB_SRC_ABI += ilp32f
 MULTILIB_SRC_ABI += ilp32d
 MULTILIB_SRC_ABI += ilp32e
 MULTILIB_SRC_ABI += lp64
+MULTILIB_SRC_ABI += lp64f
 MULTILIB_SRC_ABI += lp64d
 
 MULTILIB_SRC_MCMODEL  = medany
@@ -61,6 +65,7 @@ march=rv32im_zicsr_zifencei/mabi=ilp32 \
 march=rv32im_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=ilp32 \
 march=rv32imac_zicsr_zifencei/mabi=ilp32 \
 march=rv32imafc_zicsr_zifencei/mabi=ilp32f \
+march=rv32imfc_zicsr_zifencei/mabi=ilp32f \
 march=rv32imafd_zicsr_zifencei/mabi=ilp32d \
 march=rv32if_zicsr_zifencei/mabi=ilp32f \
 march=rv32e_zicsr_zifencei/mabi=ilp32e \
@@ -73,7 +78,9 @@ march=rv64im_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64/mcmodel=medany \
 march=rv64imac_zicsr_zifencei/mabi=lp64/mcmodel=medany \
 march=rv64imac_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64/mcmodel=medany \
 march=rv64imafdc_zicsr_zifencei/mabi=lp64d/mcmodel=medany \
-march=rv64imafd_zicsr_zifencei/mabi=lp64d/mcmodel=medany
+march=rv64imafd_zicsr_zifencei/mabi=lp64d/mcmodel=medany \
+march=rv64imfc_zicsr_zifencei/mabi=lp64f/mcmodel=medany \
+march=rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64f/mcmodel=medany
 
 # Multilib alternate mapping
 MULTILIB_REUSE = \
@@ -103,6 +110,7 @@ march.rv64imac_zicsr_zifencei/mabi.lp64/mcmodel.medany=march.rv64imac_zicsr_zife
 march.rv64imac_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64/mcmodel.medany=march.rv64imac_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64 \
 march.rv64imafdc_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64imafdc_zicsr_zifencei/mabi.lp64d \
 march.rv64imafd_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64imafd_zicsr_zifencei/mabi.lp64d \
+march.rv64imfc_zicsr_zifencei/mabi.lp64f/mcmodel.medany=march.rv64imfc_zicsr_zifencei/mabi.lp64f \
 march.rv64i_zicsr_zifencei/mabi.lp64/mcmodel.medany=march.rv64ia_zicsr_zifencei/mabi.lp64/mcmodel.medany \
 march.rv64i_zicsr_zifencei/mabi.lp64/mcmodel.medany=march.rv64ia_zicsr_zifencei/mabi.lp64 \
 march.rv64i_zicsr_zifencei/mabi.lp64/mcmodel.medany=march.rv64iac_zicsr_zifencei/mabi.lp64/mcmodel.medany \
