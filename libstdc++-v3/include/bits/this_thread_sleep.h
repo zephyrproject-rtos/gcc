@@ -40,6 +40,10 @@
 # include <time.h>  // nanosleep
 #endif
 
+#ifdef _GLIBCXX_USE_THRD_SLEEP
+#include <threads.h>
+#endif
+
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
@@ -57,7 +61,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   {
 #ifndef _GLIBCXX_NO_SLEEP
 
-#ifndef _GLIBCXX_USE_NANOSLEEP
+#if !(defined(_GLIBCXX_USE_NANOSLEEP) || defined(_GLIBCXX_USE_THRD_SLEEP))
     void
     __sleep_for(chrono::seconds, chrono::nanoseconds);
 #endif
@@ -79,6 +83,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  };
 	while (::nanosleep(&__ts, &__ts) == -1 && errno == EINTR)
 	  { }
+#elif defined(_GLIBCXX_USE_THRD_SLEEP)
+	struct ::timespec __ts =
+	  {
+	    static_cast<std::time_t>(__s.count()),
+	    static_cast<long>(__ns.count())
+	  };
+  ::thrd_sleep(&__ts, &__ts);
 #else
 	__sleep_for(__s, __ns);
 #endif

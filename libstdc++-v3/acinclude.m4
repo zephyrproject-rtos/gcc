@@ -1320,6 +1320,8 @@ dnl        not always desirable because, in glibc 2.16 and earlier, for
 dnl        example, in turn it triggers the linking of libpthread too,
 dnl        which activates locking,
 dnl        a large overhead for single-thread programs.
+dnl --enable-libstdcxx-time=c11
+dnl        checks for the availability of <threads.h> and thrd_sleep in libc.
 dnl --enable-libstdcxx-time=no
 dnl --disable-libstdcxx-time
 dnl        disables the checks completely
@@ -1333,7 +1335,7 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
 
   GLIBCXX_ENABLE(libstdcxx-time,auto,[[[=KIND]]],
     [use KIND for check type],
-    [permit yes|no|rt])
+    [permit yes|no|rt|c11])
 
   AC_LANG_SAVE
   AC_LANG_CPLUSPLUS
@@ -1345,6 +1347,9 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
   ac_has_clock_realtime=no
   ac_has_nanosleep=no
   ac_has_sched_yield=no
+  ac_has_thrd_sleep=no
+
+  AC_CHECK_HEADERS(threads.h, ac_has_threads_h=yes, ac_has_threads_h=no)
 
   if test x"$enable_libstdcxx_time" = x"auto"; then
 
@@ -1396,11 +1401,20 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
         ac_has_sched_yield=yes
     esac
 
+  elif test x"$enable_libstdcxx_time" = x"c11"; then
+    
+    # workaround for the error below until ac_cv_func_thrd_sleep is available when cross-compiling
+    # checking for library containing thrd_sleep...
+    # configure: error: Link tests are not allowed after GCC_NO_EXECUTABLES.
+    ac_has_thrd_sleep=yes
+
   elif test x"$enable_libstdcxx_time" != x"no"; then
 
     if test x"$enable_libstdcxx_time" = x"rt"; then
       AC_SEARCH_LIBS(clock_gettime, [rt])
       AC_SEARCH_LIBS(nanosleep, [rt])
+    elif test x"$enable_libstdcxx_time" = x"c11"; then
+      AC_CHECK_FUNC(thrd_sleep)
     else
       AC_CHECK_FUNC(clock_gettime)
       AC_CHECK_FUNC(nanosleep)
@@ -1537,6 +1551,9 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
   if test x"$ac_has_nanosleep" = x"yes"; then
     AC_DEFINE(_GLIBCXX_USE_NANOSLEEP, 1,
       [ Defined if nanosleep is available. ])
+  elif test x"$ac_has_thrd_sleep" = x"yes"; then
+    AC_DEFINE(_GLIBCXX_USE_THRD_SLEEP, 1,
+      [ Defined if thrd_sleep is available. ])
   else
       AC_MSG_CHECKING([for sleep])
       AC_TRY_COMPILE([#include <unistd.h>],
@@ -1557,7 +1574,7 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
       AC_MSG_RESULT($ac_has_usleep)
   fi
 
-  if test x"$ac_has_nanosleep$ac_has_sleep" = x"nono"; then
+  if test x"$ac_has_nanosleep$ac_has_sleep$ac_has_thrd_sleep" = x"nonono"; then
       ac_no_sleep=yes
       AC_MSG_CHECKING([for Sleep])
       AC_TRY_COMPILE([#include <windows.h>],
