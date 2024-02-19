@@ -214,6 +214,13 @@ namespace this_thread
       };
     while (::nanosleep(&__ts, &__ts) == -1 && errno == EINTR)
       { }
+#elif defined(_GLIBCXX_HAVE_THRD_SLEEP)
+    struct ::timespec __ts =
+      {
+	static_cast<std::time_t>(__s.count()),
+	static_cast<long>(__ns.count())
+      };
+    ::thrd_sleep(&__ts, &__ts);
 #elif defined(_GLIBCXX_HAVE_SLEEP)
     const auto target = chrono::steady_clock::now() + __s + __ns;
     while (true)
