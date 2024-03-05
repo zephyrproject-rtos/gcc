@@ -286,6 +286,9 @@ EnumValue
 Enum(processor_type) String(cortex-r52) Value( TARGET_CPU_cortexr52)
 
 EnumValue
+Enum(processor_type) String(cortex-m85) Value( TARGET_CPU_cortexm85)
+
+EnumValue
 Enum(processor_type) String(cortex-r52plus) Value( TARGET_CPU_cortexr52plus)
 
 Enum
