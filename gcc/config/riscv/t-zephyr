@@ -24,6 +24,8 @@ MULTILIB_SRC_ARCH += rv32em_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv32ema_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv32emc_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv32emc_zicsr_zifencei_zba_zbb_zbc_zbs
+MULTILIB_SRC_ARCH += rv32emc_zicsr
+MULTILIB_SRC_ARCH += rv32emc_zicsr_zba_zbb_zbc_zbs
 MULTILIB_SRC_ARCH += rv32emac_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv32emac_zicsr_zifencei_zba_zbb_zbc_zbs
 MULTILIB_SRC_ARCH += rv32ea_zicsr_zifencei
@@ -72,6 +74,8 @@ march=rv32e_zicsr_zifencei/mabi=ilp32e \
 march=rv32em_zicsr_zifencei/mabi=ilp32e \
 march=rv32emc_zicsr_zifencei/mabi=ilp32e \
 march=rv32emc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=ilp32e \
+march=rv32emc_zicsr/mabi=ilp32e \
+march=rv32emc_zicsr_zba_zbb_zbc_zbs/mabi=ilp32e \
 march=rv64i_zicsr_zifencei/mabi=lp64/mcmodel=medany \
 march=rv64im_zicsr_zifencei/mabi=lp64/mcmodel=medany \
 march=rv64im_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64/mcmodel=medany \
