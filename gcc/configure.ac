@@ -1994,7 +1994,7 @@ case ${enable_threads} in
     # default
     target_thread_file='single'
     ;;
-  aix | c11 | dce | lynx | mipssde | posix | rtems | \
+  aix | dce | lynx | mipssde | posix | rtems | \
   single | tpf | vxworks | win32)
     target_thread_file=${enable_threads}
     ;;
