@@ -20493,7 +20493,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 if test "${enable_libstdcxx_time+set}" = set; then :
   enableval=$enable_libstdcxx_time;
       case "$enableval" in
-       yes|no|rt|c11) ;;
+       yes|no|rt) ;;
        *) as_fn_error $? "Unknown argument to enable/disable libstdcxx-time" "$LINENO" 5 ;;
 	  	        esac
 
@@ -20518,21 +20518,6 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
   ac_has_clock_realtime=no
   ac_has_nanosleep=no
   ac_has_sched_yield=no
-  ac_has_thrd_sleep=no
-
-    for ac_header in threads.h
-do :
-  ac_fn_cxx_check_header_mongrel "$LINENO" "threads.h" "ac_cv_header_threads_h" "$ac_includes_default"
-if test "x$ac_cv_header_threads_h" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_THREADS_H 1
-_ACEOF
-  ac_has_threads_h=yes
-else
-  ac_has_threads_h=no
-fi
-
-done
 
   if test x"$enable_libstdcxx_time" = x"auto"; then
 
@@ -20641,13 +20626,6 @@ fi
         ac_has_nanosleep=yes
         ac_has_sched_yield=yes
     esac
-
-  elif test x"$enable_libstdcxx_time" = x"c11"; then
-
-    # workaround for the error below until ac_cv_func_thrd_sleep is available when cross-compiling
-    # checking for library containing thrd_sleep...
-    # configure: error: Link tests are not allowed after GCC_NO_EXECUTABLES.
-    ac_has_thrd_sleep=yes
 
   elif test x"$enable_libstdcxx_time" != x"no"; then
 
@@ -20770,11 +20748,6 @@ if test "$ac_res" != no; then :
 
 fi
 
-    elif test x"$enable_libstdcxx_time" = x"c11"; then
-      ac_fn_cxx_check_func "$LINENO" "thrd_sleep" "ac_cv_func_thrd_sleep"
-if test "x$ac_cv_func_thrd_sleep" = xyes; then :
-
-fi
     else
       ac_fn_cxx_check_func "$LINENO" "clock_gettime" "ac_cv_func_clock_gettime"
 if test "x$ac_cv_func_clock_gettime" = xyes; then :
@@ -21085,10 +21058,6 @@ $as_echo "#define _GLIBCXX_USE_SCHED_YIELD 1" >>confdefs.h
 
 $as_echo "#define _GLIBCXX_USE_NANOSLEEP 1" >>confdefs.h
 
-  elif test x"$ac_has_thrd_sleep" = x"yes"; then
-
-$as_echo "#define _GLIBCXX_USE_THRD_SLEEP 1" >>confdefs.h
-
   else
       { $as_echo "$as_me:${as_lineno-$LINENO}: checking for sleep" >&5
 $as_echo_n "checking for sleep... " >&6; }
@@ -21145,7 +21114,7 @@ $as_echo "#define HAVE_USLEEP 1" >>confdefs.h
 $as_echo "$ac_has_usleep" >&6; }
   fi
 
-  if test x"$ac_has_nanosleep$ac_has_sleep$ac_has_thrd_sleep" = x"nonono"; then
+  if test x"$ac_has_nanosleep$ac_has_sleep" = x"nono"; then
       ac_no_sleep=yes
       { $as_echo "$as_me:${as_lineno-$LINENO}: checking for Sleep" >&5
 $as_echo_n "checking for Sleep... " >&6; }
