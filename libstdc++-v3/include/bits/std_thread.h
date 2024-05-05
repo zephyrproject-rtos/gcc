@@ -41,7 +41,6 @@
 #include <bits/invoke.h>	// std::__invoke
 #include <bits/refwrap.h>       // not required, but helpful to users
 #include <bits/unique_ptr.h>	// std::unique_ptr
-#include <bits/shared_ptr.h>	// std::shared_ptr
 
 #ifdef _GLIBCXX_HAS_GTHREADS
 # include <bits/gthr.h>
