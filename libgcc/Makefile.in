@@ -436,6 +436,9 @@ LIB2ADD += enable-execute-stack.c
 LIB2ADDEH += $(srcdir)/emutls.c
 LIB2ADDEHSTATIC += $(srcdir)/emutls.c
 LIB2ADDEHSHARED += $(srcdir)/emutls.c
+LIB2ADDEH += $(srcdir)/c11-thrd-weak.c
+LIB2ADDEHSTATIC += $(srcdir)/c11-thrd-weak.c
+LIB2ADDEHSHARED += $(srcdir)/c11-thrd-weak.c
 
 # Library members defined in libgcc2.c.
 lib2funcs = _muldi3 _negdi2 _lshrdi3 _ashldi3 _ashrdi3 _cmpdi2 _ucmpdi2	   \
