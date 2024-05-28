@@ -97,6 +97,9 @@ MULTILIB_DIRNAMES	+= v5te v7 v7+fp v7-r+fp.sp $(MULTI_ARCH_DIRS_A) $(MULTI_ARCH_
 
 MULTILIB_OPTIONS	+= mfloat-abi=soft/mfloat-abi=softfp/mfloat-abi=hard
 MULTILIB_DIRNAMES	+= nofp softfp hard
+ 
+MULTILIB_OPTIONS	+= mbig-endian
+MULTILIB_DIRNAMES	+= big-endian
 
 MULTILIB_REQUIRED	+= mthumb/mfloat-abi=soft
 MULTILIB_REQUIRED	+= marm/march=armv5te+fp/mfloat-abi=softfp
@@ -108,6 +111,12 @@ MULTILIB_REQUIRED	+= mthumb/march=armv7+fp/mfloat-abi=hard
 
 MULTILIB_REQUIRED	+= mthumb/march=armv7-r+fp.sp/mfloat-abi=softfp
 MULTILIB_REQUIRED	+= mthumb/march=armv7-r+fp.sp/mfloat-abi=hard
+
+MULTILIB_REQUIRED	+= mthumb/march=armv7/mfloat-abi=soft/mbig-endian
+MULTILIB_REQUIRED	+= mthumb/march=armv7+fp/mfloat-abi=softfp/mbig-endian
+MULTILIB_REQUIRED	+= mthumb/march=armv7+fp/mfloat-abi=hard/mbig-endian
+MULTILIB_REQUIRED	+= mthumb/march=armv7-r+fp.sp/mfloat-abi=softfp/mbig-endian
+MULTILIB_REQUIRED	+= mthumb/march=armv7-r+fp.sp/mfloat-abi=hard/mbig-endian
 
 # Map v7-r with double precision down onto common v7 code.
 MULTILIB_MATCHES	+= march?armv7=march?armv7-r
@@ -214,13 +223,21 @@ endif		# Not APROFILE.
 # Use Thumb libraries for everything.
 
 MULTILIB_REUSE		+= mthumb/march.armv7/mfloat-abi.soft=marm/march.armv7/mfloat-abi.soft
+MULTILIB_REUSE		+= mthumb/march.armv7/mfloat-abi.soft/mbig-endian=marm/march.armv7/mfloat-abi.soft/mbig-endian
 
 MULTILIB_REUSE		+= $(foreach ABI, hard softfp, \
 			     $(foreach ARCH, armv7+fp armv7-r+fp\.sp, \
 			       mthumb/march.$(ARCH)/mfloat-abi.$(ABI)=marm/march.$(ARCH)/mfloat-abi.$(ABI)))
 
+MULTILIB_REUSE		+= $(foreach ABI, hard softfp, \
+			     $(foreach ARCH, armv7+fp armv7-r+fp\.sp, \
+			       mthumb/march.$(ARCH)/mfloat-abi.$(ABI)/mbig-endian=marm/march.$(ARCH)/mfloat-abi.$(ABI)/mbig-endian))
+
 # Softfp but no FP, use the soft-float libraries.
 MULTILIB_REUSE		+= $(foreach MODE, arm thumb, \
 			     $(foreach ARCH, armv7, \
 			       mthumb/march.$(ARCH)/mfloat-abi.soft=m$(MODE)/march.$(ARCH)/mfloat-abi.softfp))
+MULTILIB_REUSE		+= $(foreach MODE, arm thumb, \
+			     $(foreach ARCH, armv7, \
+			       mthumb/march.$(ARCH)/mfloat-abi.soft/mbig-endian=m$(MODE)/march.$(ARCH)/mfloat-abi.softfp/mbig-endian))
 
