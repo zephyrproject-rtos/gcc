@@ -31,6 +31,7 @@
 #include <ext/atomicity.h>
 #include <ext/concurrence.h>
 #include <bits/atomic_lockfree_defines.h>
+#include <stdio.h>
 #if defined(__GTHREADS) && defined(__GTHREAD_HAS_COND) \
   && (ATOMIC_INT_LOCK_FREE > 1) && defined(_GLIBCXX_HAVE_LINUX_FUTEX)
 # include <climits>
@@ -73,6 +74,7 @@ namespace
     bool unlock;
     mutex_wrapper() : unlock(true)
     { 
+      printf("[HACK]: skipping static mutex lock\n");
       // this throws mutex lock excpetion in zephyr, we're 
       // mostly single threaded so do not lock for now.
       // get_static_mutex().lock(); 
@@ -80,6 +82,7 @@ namespace
 
     ~mutex_wrapper()
     {
+      printf("[HACK] skipping static mutex unlock\n");
       // if (unlock)
 	// static_mutex->unlock();
     }
@@ -445,8 +448,8 @@ namespace __cxxabiv1
 
 	set_init_in_progress_flag(g, 0);
 	_GLIBCXX_GUARD_SET_AND_RELEASE(g);
-
-        get_static_cond().broadcast();
+        printf("[HACK] skipping static cond broadcast\n");
+        // get_static_cond().broadcast();
 	return;
       }	
 #endif
