@@ -72,12 +72,16 @@ namespace
   {
     bool unlock;
     mutex_wrapper() : unlock(true)
-    { get_static_mutex().lock(); }
+    { 
+      // this throws mutex lock excpetion in zephyr, we're 
+      // mostly single threaded so do not lock for now.
+      // get_static_mutex().lock(); 
+    }
 
     ~mutex_wrapper()
     {
-      if (unlock)
-	static_mutex->unlock();
+      // if (unlock)
+	// static_mutex->unlock();
     }
   };
 }
