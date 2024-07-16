@@ -68,23 +68,31 @@ namespace
     return *static_mutex;
   }
 
+//#define META_HACK_MUTEX_SKIP
+
   // Simple wrapper for exception safety.
   struct mutex_wrapper
   {
     bool unlock;
     mutex_wrapper() : unlock(true)
     { 
+#ifdef META_HACK_MUTEX_SKIP
       printf("[HACK]: skipping static mutex lock\n");
       // this throws mutex lock excpetion in zephyr, we're 
       // mostly single threaded so do not lock for now.
-      // get_static_mutex().lock(); 
+#else
+      get_static_mutex().lock(); 
+#endif
     }
 
     ~mutex_wrapper()
     {
+#ifdef META_HACK_MUTEX_SKIP
       printf("[HACK] skipping static mutex unlock\n");
-      // if (unlock)
-	// static_mutex->unlock();
+#else
+       if (unlock)
+      	 static_mutex->unlock();
+#endif
     }
   };
 }
