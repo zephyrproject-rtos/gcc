@@ -5736,6 +5736,7 @@ static int
 do_spec_2 (const char *spec, const char *soft_matched_part)
 {
   int result;
+  int save_processing_spec_function;
 
   clear_args ();
   arg_going = 0;
@@ -5745,10 +5746,14 @@ do_spec_2 (const char *spec, const char *soft_matched_part)
   this_is_linker_script = 0;
   input_from_pipe = 0;
   suffix_subst = NULL;
+  save_processing_spec_function = processing_spec_function;
+  processing_spec_function = 0;
 
   result = do_spec_1 (spec, 0, soft_matched_part);
 
   end_going_arg ();
+
+  processing_spec_function = save_processing_spec_function;
 
   return result;
 }
@@ -6747,7 +6752,12 @@ do_spec_1 (const char *spec, int inswitch, const char *soft_matched_part)
 	    if (soft_matched_part)
 	      {
 		if (soft_matched_part[0])
-		  do_spec_1 (soft_matched_part, 1, NULL);
+		  {
+		    int save_processing_spec_function = processing_spec_function;
+		    processing_spec_function = 0;
+		    do_spec_1 (soft_matched_part, 1, NULL);
+		    processing_spec_function = save_processing_spec_function;
+		  }
 		/* Only insert a space after the substitution if it is at the
 		   end of the current sequence.  So if:
 
