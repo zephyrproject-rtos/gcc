@@ -1175,6 +1175,18 @@ for aarch64*-*-*, arm*-*-*, loongarch64-*-*, riscv*-*-*, sh*-*-* and
 x86-64-*-linux*.  The accepted values and meaning for each target is given
 below.
 
+@item --enable-multilib-space
+Double the set of target libraries built by building two versions of
+each specified by the options above, one using @option{-O2 }and
+another using @option{-Os}. During linking, the @option{-O2} variant
+will be selected by default. Select the @option{-Os} variant by
+including @option{-Os} or @option{-Oz} in the linker command
+line. Note: because multilib selection only looks for the presence of
+compiler flags (unlike options controlling the compiler optimization
+level), a subsequent optimization flag other than @option{-Os} or or
+@option{-Oz} will not switch back to the @option{-O2} library
+versions.
+
 @table @code
 @item aarch64*-*-*
 @var{list} is a comma separated list of @code{ilp32}, and @code{lp64}
