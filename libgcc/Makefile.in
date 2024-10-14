@@ -293,16 +293,20 @@ override CFLAGS := $(filter-out -fprofile-generate -fprofile-use,$(CFLAGS))
 # CFLAGS first is not perfect; normally setting CFLAGS should override any
 # options in LIBGCC2_CFLAGS.  But LIBGCC2_CFLAGS may contain -g0, and CFLAGS
 # will usually contain -g, so for the moment CFLAGS goes first.  We must
-# include CFLAGS - that's where multilib options live.
+# include CFLAGS - that's where multilib options live. If CC or CFLAGS
+# specify -Os or -Oz, we want that to override our local options as that
+# could be a multilib flag.
 INTERNAL_CFLAGS = $(CFLAGS) $(LIBGCC2_CFLAGS) $(HOST_LIBGCC2_CFLAGS) \
-		  $(INCLUDES) @set_have_cc_tls@ @set_use_emutls@
+		  $(INCLUDES) @set_have_cc_tls@ @set_use_emutls@ \
+		  $(filter -Os -Oz,$(CC) $(CFLAGS))
 
 # Options to use when compiling crtbegin/end.
 CRTSTUFF_CFLAGS = -O2 $(GCC_CFLAGS) $(INCLUDES) $(MULTILIB_CFLAGS) -g0 \
   $(NO_PIE_CFLAGS) -finhibit-size-directive -fno-inline -fno-exceptions \
   -fno-zero-initialized-in-bss -fno-toplevel-reorder -fno-tree-vectorize \
   -fbuilding-libgcc -fno-stack-protector $(FORCE_EXPLICIT_EH_REGISTRY) \
-  $(INHIBIT_LIBC_CFLAGS) $(USE_TM_CLONE_REGISTRY)
+  $(INHIBIT_LIBC_CFLAGS) $(USE_TM_CLONE_REGISTRY) \
+  $(filter -Os -Oz,$(CC) $(CFLAGS))
 
 # Extra flags to use when compiling crt{begin,end}.o.
 CRTSTUFF_T_CFLAGS =
