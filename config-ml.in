@@ -175,7 +175,7 @@ eval scan_arguments "${ac_configure_args}"
 unset scan_arguments
 
 # Only do this if --enable-multilib.
-if [ "${enable_multilib}" = yes ]; then
+if [ "${enable_multilib}" = yes -o "${enable_multilib_space}" = yes ]; then
 
 # Compute whether this is the library's top level directory
 # (ie: not a multilib subdirectory, and not a subdirectory like newlib/src).

@@ -2179,25 +2179,47 @@ libgcc.mvars: config.status Makefile specs xgcc$(exeext)
 
 	mv tmp-libgcc.mvars libgcc.mvars
 
+ifeq (@enable_multilib_space@,yes)
+MULTILIB_OPTIONS	+= Os
+MULTILIB_DIRNAMES	+= space
+MULTILIB_MATCHES	+= Os=Oz
+
+MULTILIB_OSDIRNAMES_SPACE = $(MULTILIB_OSDIRNAMES)\
+	$(if $(findstring =,$(MULTILIB_OSDIRNAMES)),\
+	  $(foreach OSD,$(MULTILIB_OSDIRNAMES),$(subst =,/Os=,$(OSD))/space),\
+	  $(if $(MULTILIB_OSDIRNAMES),space,))
+MULTILIB_REQUIRED_SPACE = $(if $(MULTILIB_REQUIRED),Os $(foreach REQ, $(MULTILIB_REQUIRED), $(REQ) $(REQ)/Os),)
+MULTILIB_EXCEPTIONS_SPACE = $(foreach EXC, $(MULTILIB_EXCEPTIONS), $(EXC) $(EXC)/Os)
+MULTILIB_REUSE_SPACE = $(foreach REU, $(MULTILIB_REUSE), $(REU) $(subst =,/Os=,$(REU))/Os)
+MULTILIB_ENABLE = yes
+else
+MULTILIB_OSDIRNAMES_SPACE = $(MULTILIB_OSDIRNAMES)
+MULTILIB_REQUIRED_SPACE = $(MULTILIB_REQUIRED)
+MULTILIB_EXCEPTIONS_SPACE = $(MULTILIB_EXCEPTIONS)
+MULTILIB_REUSE_SPACE = $(MULTILIB_REUSE)
+MULTILIB_ENABLE = @multilib@
+endif
+
 # Use the genmultilib shell script to generate the information the gcc
 # driver program needs to select the library directory based on the
 # switches.
 multilib.h: s-mlib; @true
 s-mlib: $(srcdir)/genmultilib Makefile
 	if test @enable_multilib@ = yes \
+           || test @enable_multilib_space@ = yes \
 	   || test -n "$(MULTILIB_OSDIRNAMES)"; then \
 	  $(SHELL) $(srcdir)/genmultilib \
 	    "$(MULTILIB_OPTIONS)" \
 	    "$(MULTILIB_DIRNAMES)" \
 	    "$(MULTILIB_MATCHES)" \
-	    "$(MULTILIB_EXCEPTIONS)" \
+	    "$(MULTILIB_EXCEPTIONS_SPACE)" \
 	    "$(MULTILIB_EXTRA_OPTS)" \
 	    "$(MULTILIB_EXCLUSIONS)" \
-	    "$(MULTILIB_OSDIRNAMES)" \
-	    "$(MULTILIB_REQUIRED)" \
+	    "$(MULTILIB_OSDIRNAMES_SPACE)" \
+	    "$(MULTILIB_REQUIRED_SPACE)" \
 	    "$(if $(MULTILIB_OSDIRNAMES),,$(MULTIARCH_DIRNAME))" \
-	    "$(MULTILIB_REUSE)" \
-	    "@enable_multilib@" \
+	    "$(MULTILIB_REUSE_SPACE)" \
+	    "$(MULTILIB_ENABLE)" \
 	    > tmp-mlib.h; \
 	else \
 	  $(SHELL) $(srcdir)/genmultilib '' '' '' '' '' '' '' '' \
