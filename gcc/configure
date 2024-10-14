@@ -838,6 +838,7 @@ enable_decimal_float
 with_float
 with_cpu
 enable_multiarch
+enable_multilib_space
 enable_multilib
 coverage_flags
 valgrind_command
@@ -960,6 +961,7 @@ enable_coverage
 enable_gather_detailed_mem_stats
 enable_valgrind_annotations
 enable_multilib
+enable_multilib_space
 enable_multiarch
 with_stack_clash_protection_guard_size
 enable___cxa_atexit
@@ -1691,6 +1693,7 @@ Optional Features:
   --enable-valgrind-annotations
                           enable valgrind runtime interaction
   --enable-multilib       enable library support for multiple ABIs
+  --enable-multilib-space enable extra -Os variant for every multilib ABI
   --enable-multiarch      enable support for multiarch paths
   --enable-__cxa_atexit   enable __cxa_atexit for C++
   --enable-decimal-float={no,yes,bid,dpd}
@@ -7812,6 +7815,16 @@ if test "${enable_multilib+set}" = set; then :
   enableval=$enable_multilib;
 else
   enable_multilib=yes
+fi
+
+
+
+# Determine whether or not -Os multilibs are enabled.
+# Check whether --enable-multilib-space was given.
+if test "${enable_multilib_space+set}" = set; then :
+  enableval=$enable_multilib_space;
+else
+  enable_multilib_space=no
 fi
 
 
