@@ -868,6 +868,13 @@ AC_ARG_ENABLE(multilib,
 [], [enable_multilib=yes])
 AC_SUBST(enable_multilib)
 
+# Determine whether or not -Os multilibs are enabled.
+AC_ARG_ENABLE(multilib-space,
+[AS_HELP_STRING([--enable-multilib-space],
+		[enable extra -Os variant for every multilib ABI])],
+[], [enable_multilib_space=no])
+AC_SUBST(enable_multilib_space)
+
 # Determine whether or not multiarch is enabled.
 AC_ARG_ENABLE(multiarch,
 [AS_HELP_STRING([--enable-multiarch],
