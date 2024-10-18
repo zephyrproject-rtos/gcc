@@ -2286,7 +2286,7 @@ else
     output_asm_insn ("bneid\t%3,.-4", operands);
     return "sra\t%0,%0";
   }
-  [(set_attr "type"    "arith")
+  [(set_attr "type"    "multi")
   (set_attr "mode"    "SI")
   (set_attr "length"  "20")]
 )
