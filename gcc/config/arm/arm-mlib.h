@@ -19,4 +19,4 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-#define MULTILIB_DEFAULTS { "mbranch-protection=none" }
+#define MULTILIB_DEFAULTS { "marm", "mfloat-abi=soft", "mbranch-protection=none",  }
