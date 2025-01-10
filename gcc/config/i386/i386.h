@@ -2112,6 +2112,18 @@ extern int const svr4_dbx_register_map[FIRST_PSEUDO_REGISTER];
 
 /* This is how to output an element of a case-vector that is absolute.  */
 
+#include "dwarf2.h"
+
+int
+i386_dwarf_calling_convention (const_tree function)
+{
+    // Return the appropriate DWARF calling convention tag
+    return DW_CC_normal; // or another appropriate DW_CC_ tag
+}
+
+#undef TARGET_DWARF_CALLING_CONVENTION
+#define TARGET_DWARF_CALLING_CONVENTION i386_dwarf_calling_convention
+
 #define ASM_OUTPUT_ADDR_VEC_ELT(FILE, VALUE)  \
   ix86_output_addr_vec_elt ((FILE), (VALUE))
 
