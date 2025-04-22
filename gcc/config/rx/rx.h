@@ -115,7 +115,7 @@
 %{msim:-lsim}%{!msim:-lnosys}				\
 %{fprofile-arcs|fprofile-generate|coverage:-lgcov} 	\
 --end-group					   	\
-%{!T*: %{msim:%Trx-sim.ld}%{!msim:%Trx.ld}}		\
+%{!r:%{!T*: %{msim:%Trx-sim.ld}%{!msim:%Trx.ld}}}	\
 "
 
 #undef  LINK_SPEC
