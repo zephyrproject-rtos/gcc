@@ -6150,10 +6150,3 @@ case "$default_libc" in
 	tm_defines="$tm_defines DEFAULT_LIBC=$default_libc"
 	;;
 esac
-
-case "$default_libc" in
-    LIBC_PICOLIBC)
-	extra_options="${extra_options} picolibc.opt"
-	tm_file="${tm_file} picolibc.h"
-	;;
-esac
