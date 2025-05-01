@@ -1453,6 +1453,7 @@ OBJS = \
 	explow.o \
 	expmed.o \
 	expr.o \
+	ext-dce.o \
 	fibonacci_heap.o \
 	file-prefix-map.o \
 	final.o \
@@ -1716,6 +1717,11 @@ OBJS = \
 	tree-iterator.o \
 	tree-logical-location.o \
 	tree-loop-distribution.o \
+	crc-verification.o \
+	gimple-crc-optimization.o \
+	sym-exec/expression.o \
+	sym-exec/state.o \
+	sym-exec/condition.o \
 	tree-nested.o \
 	tree-nrv.o \
 	tree-object-size.o \

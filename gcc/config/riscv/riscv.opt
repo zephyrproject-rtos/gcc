@@ -620,3 +620,28 @@ Enum(tls_type) String(desc) Value(TLS_DESCRIPTORS)
 mtls-dialect=
 Target RejectNegative Joined Enum(tls_type) Var(riscv_tls_dialect) Init(TLS_TRADITIONAL) Save
 Specify TLS dialect.
+
+Enum
+Name(arcv_mpy_option) Type(enum arcv_mpy_option_enum)
+Valid arguments to -param=arcv_mpy_option=:
+
+EnumValue
+Enum(arcv_mpy_option) String(1c) Value(ARCV_MPY_OPTION_1C)
+
+EnumValue
+Enum(arcv_mpy_option) String(2c) Value(ARCV_MPY_OPTION_2C)
+
+EnumValue
+Enum(arcv_mpy_option) String(10c) Value(ARCV_MPY_OPTION_10C)
+
+-param=arcv-mpy-option=
+Target RejectNegative Joined Enum(arcv_mpy_option) Var(arcv_mpy_option) Init(ARCV_MPY_OPTION_2C)
+The type of MPY unit used by the RMX-100 core (to be used in combination with -mtune=arc-v-rmx-100-series) (default: 2c).
+
+mlong-double-64
+Target RejectNegative Negative(mlong-double-128) Mask(LONG_DOUBLE_64)
+Use 64-bit long double.
+
+mlong-double-128
+Target RejectNegative Negative(mlong-double-64) InverseMask(LONG_DOUBLE_64)
+Use 128-bit long double.

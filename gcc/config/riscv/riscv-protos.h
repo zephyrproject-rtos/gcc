@@ -153,6 +153,9 @@ extern bool riscv_epilogue_uses (unsigned int);
 extern bool riscv_can_use_return_insn (void);
 extern rtx riscv_function_value (const_tree, const_tree, enum machine_mode);
 extern bool riscv_store_data_bypass_p (rtx_insn *, rtx_insn *);
+extern bool arcv_mpy_1c_bypass_p (rtx_insn *, rtx_insn *);
+extern bool arcv_mpy_2c_bypass_p (rtx_insn *, rtx_insn *);
+extern bool arcv_mpy_10c_bypass_p (rtx_insn *, rtx_insn *);
 extern rtx riscv_gen_gpr_save_insn (struct riscv_frame_info *);
 extern bool riscv_gpr_save_operation_p (rtx);
 extern void riscv_reinit (void);
@@ -165,6 +168,12 @@ extern bool riscv_shamt_matches_mask_p (int, HOST_WIDE_INT);
 extern void riscv_subword_address (rtx, rtx *, rtx *, rtx *, rtx *);
 extern void riscv_lshift_subword (machine_mode, rtx, rtx, rtx *);
 extern enum memmodel riscv_union_memmodels (enum memmodel, enum memmodel);
+extern bool riscv_reg_frame_related (rtx);
+extern void riscv_split_sum_of_two_s12 (HOST_WIDE_INT, HOST_WIDE_INT *,
+					HOST_WIDE_INT *);
+extern void generate_reflecting_code_using_brev (rtx *, int);
+extern void expand_crc_using_clmul (rtx *);
+extern void expand_reversed_crc_using_clmul (rtx *);
 
 /* Routines implemented in riscv-c.cc.  */
 void riscv_cpu_cpp_builtins (cpp_reader *);
@@ -749,6 +758,10 @@ extern unsigned int th_int_get_mask (unsigned int);
 extern unsigned int th_int_get_save_adjustment (void);
 extern rtx th_int_adjust_cfi_prologue (unsigned int);
 extern const char *th_asm_output_opcode (FILE *asm_out_file, const char *p);
+
+extern bool riscv_macro_fusion_p ();
+extern bool riscv_is_micro_arch(enum riscv_microarchitecture_type);
+
 #ifdef RTX_CODE
 extern const char*
 th_mempair_output_move (rtx[4], bool, machine_mode, RTX_CODE);

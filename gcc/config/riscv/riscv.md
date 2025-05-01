@@ -93,6 +93,10 @@
   ;; XTheadFmv moves
   UNSPEC_XTHEADFMV
   UNSPEC_XTHEADFMV_HW
+
+  ;; CRC unspecs
+  UNSPEC_CRC
+  UNSPEC_CRC_REV
 ])
 
 (define_c_enum "unspecv" [
@@ -484,7 +488,7 @@
    vslideup,vslidedown,vislide1up,vislide1down,vfslide1up,vfslide1down,
    vgather,vcompress,vmov,vector,vandn,vbrev,vbrev8,vrev8,vclz,vctz,vcpop,vrol,vror,vwsll,
    vclmul,vclmulh,vghsh,vgmul,vaesef,vaesem,vaesdf,vaesdm,vaeskf1,vaeskf2,vaesz,
-   vsha2ms,vsha2ch,vsha2cl,vsm4k,vsm4r,vsm3me,vsm3c"
+   vsha2ms,vsha2ch,vsha2cl,vsm4k,vsm4r,vsm3me,vsm3c,alu_fused,imul_fused"
   (cond [(eq_attr "got" "load") (const_string "load")
 
 	 ;; If a doubleword move uses these expensive instructions,
@@ -637,7 +641,7 @@
 ;; Microarchitectures we know how to tune for.
 ;; Keep this in sync with enum riscv_microarchitecture.
 (define_attr "tune"
-  "generic,sifive_7,sifive_p400,sifive_p600,xiangshan,generic_ooo"
+  "generic,sifive_7,sifive_p400,sifive_p600,xiangshan,arcv_rmx100,arcv_rmx500,arcv_rhx100,generic_ooo"
   (const (symbol_ref "((enum attr_tune) riscv_microarchitecture)")))
 
 ;; Describe a user's asm statement.
@@ -3719,7 +3723,34 @@
 	  (mult:SI (sign_extend:SI (match_operand:HI 1 "register_operand"))
 		   (sign_extend:SI (match_operand:HI 2 "register_operand")))
 	  (match_operand:SI 3 "register_operand")))]
-  "TARGET_XTHEADMAC"
+  "TARGET_XTHEADMAC ||
+     (riscv_is_micro_arch (arcv_rhx100) && !TARGET_64BIT && (TARGET_ZMMUL || TARGET_MUL))"
+  {
+    if (riscv_is_micro_arch (arcv_rhx100))
+      {
+        rtx tmp0 = gen_reg_rtx (SImode), tmp1 = gen_reg_rtx (SImode);
+        emit_insn (gen_extendhisi2 (tmp0, operands[1]));
+        emit_insn (gen_extendhisi2 (tmp1, operands[2]));
+        emit_insn (gen_madd_split_fused (operands[0], tmp0, tmp1, operands[3]));
+        DONE;
+      }
+  }
+)
+
+(define_expand "umaddhisi4"
+  [(set (match_operand:SI 0 "register_operand")
+	(plus:SI
+	  (mult:SI (zero_extend:SI (match_operand:HI 1 "register_operand"))
+		   (zero_extend:SI (match_operand:HI 2 "register_operand")))
+	  (match_operand:SI 3 "register_operand")))]
+  "riscv_is_micro_arch (arcv_rhx100) && !TARGET_64BIT && (TARGET_ZMMUL || TARGET_MUL)"
+  {
+    rtx tmp0 = gen_reg_rtx (SImode), tmp1 = gen_reg_rtx (SImode);
+    emit_insn (gen_zero_extendhisi2 (tmp0, operands[1]));
+    emit_insn (gen_zero_extendhisi2 (tmp1, operands[2]));
+    emit_insn (gen_madd_split_fused (operands[0], tmp0, tmp1, operands[3]));
+    DONE;
+  }
 )
 
 (define_expand "msubhisi4"
@@ -3729,6 +3760,44 @@
 	  (mult:SI (sign_extend:SI (match_operand:HI 1 "register_operand"))
 		   (sign_extend:SI (match_operand:HI 2 "register_operand")))))]
   "TARGET_XTHEADMAC"
+)
+
+(define_insn "madd_split_fused"
+  [(set (match_operand:SI 0 "register_operand" "=&r,r")
+     (plus:SI
+        (mult:SI (match_operand:SI 1 "register_operand" "r,r")
+                 (match_operand:SI 2 "register_operand" "r,r"))
+        (match_operand:SI 3 "register_operand" "r,?0")))
+    (clobber (match_scratch:SI 4 "=&r,&r"))]
+  "riscv_is_micro_arch (arcv_rhx100) && !TARGET_64BIT && (TARGET_ZMMUL || TARGET_MUL)"
+  {
+     if (REGNO (operands[0]) == REGNO (operands[3]))
+       {
+           return "mul\t%4,%1,%2\n\tadd\t%4,%3,%4\n\tmv\t%0,%4";
+       }
+     else
+       {
+           return "mul\t%0,%1,%2\n\tadd\t%0,%0,%3";
+       }
+  }
+  [(set_attr "type" "imul_fused")]
+)
+
+(define_insn "*zero_extract_fused"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (zero_extract:SI (match_operand:SI 1 "register_operand" "r")
+                         (match_operand 2 "const_int_operand")
+                         (match_operand 3 "const_int_operand")))]
+  "riscv_is_micro_arch (arcv_rhx100) && !TARGET_64BIT
+     && (INTVAL (operands[2]) > 1 || !TARGET_ZBS)"
+  {
+     int amount = INTVAL (operands[2]);
+     int end = INTVAL (operands[3]) + amount;
+     operands[2] = GEN_INT (BITS_PER_WORD - end);
+     operands[3] = GEN_INT (BITS_PER_WORD - amount);
+     return "slli\t%0,%1,%2\n\tsrli\t%0,%0,%3";
+  }
+  [(set_attr "type" "alu_fused")]
 )
 
 ;; String compare with length insn.
@@ -3830,3 +3899,6 @@
 (include "zc.md")
 (include "corev.md")
 (include "xiangshan.md")
+(include "arcv-rmx100.md")
+(include "arcv-rmx500.md")
+(include "arcv-rhx100.md")
