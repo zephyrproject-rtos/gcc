@@ -800,7 +800,7 @@ store_bit_field_1 (rtx str_rtx, poly_uint64 bitsize, poly_uint64 bitnum,
       if (known_eq (bitnum, 0U)
 	  && known_eq (bitsize, GET_MODE_BITSIZE (GET_MODE (op0))))
 	{
-	  sub = simplify_gen_subreg (GET_MODE (op0), value, fieldmode, 0);
+	  sub = force_subreg (GET_MODE (op0), value, fieldmode, 0);
 	  if (sub)
 	    {
 	      if (reverse)
@@ -1627,7 +1627,7 @@ extract_bit_field_as_subreg (machine_mode mode, rtx op0,
       && known_eq (bitsize, GET_MODE_BITSIZE (mode))
       && lowpart_bit_field_p (bitnum, bitsize, op0_mode)
       && TRULY_NOOP_TRUNCATION_MODES_P (mode, op0_mode))
-    return simplify_gen_subreg (mode, op0, op0_mode, bytenum);
+    return force_subreg (mode, op0, op0_mode, bytenum);
   return NULL_RTX;
 }
 
@@ -1994,11 +1994,11 @@ extract_integral_bit_field (rtx op0, opt_scalar_int_mode op0_mode,
 	  return convert_extracted_bit_field (target, mode, tmode, unsignedp);
 	}
       /* If OP0 is a hard register, copy it to a pseudo before calling
-	 simplify_gen_subreg.  */
+	 force_subreg.  */
       if (REG_P (op0) && HARD_REGISTER_P (op0))
 	op0 = copy_to_reg (op0);
-      op0 = simplify_gen_subreg (word_mode, op0, op0_mode.require (),
-				 bitnum / BITS_PER_WORD * UNITS_PER_WORD);
+      op0 = force_subreg (word_mode, op0, op0_mode.require (),
+			  bitnum / BITS_PER_WORD * UNITS_PER_WORD);
       op0_mode = word_mode;
       bitnum %= BITS_PER_WORD;
     }
@@ -5759,8 +5759,8 @@ emit_store_flag_1 (rtx target, enum rtx_code code, rtx op0, rtx op1,
 
 	  /* Do a logical OR or AND of the two words and compare the
 	     result.  */
-	  op00 = simplify_gen_subreg (word_mode, op0, int_mode, 0);
-	  op01 = simplify_gen_subreg (word_mode, op0, int_mode, UNITS_PER_WORD);
+	  op00 = force_subreg (word_mode, op0, int_mode, 0);
+	  op01 = force_subreg (word_mode, op0, int_mode, UNITS_PER_WORD);
 	  tem = expand_binop (word_mode,
 			      op1 == const0_rtx ? ior_optab : and_optab,
 			      op00, op01, NULL_RTX, unsignedp,
