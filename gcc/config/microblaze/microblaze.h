@@ -110,7 +110,7 @@ extern enum pipeline_type microblaze_pipe;
   %{Zxl-mode-xmdstub:-defsym _TEXT_START_ADDR=0x800} \
   %{mxl-mode-xmdstub:-defsym _TEXT_START_ADDR=0x800} \
   %{mxl-gp-opt:%{G*}} %{!mxl-gp-opt: -G 0} \
-  %{!r:%{!T*: -dT xilinx.ld%s}}"
+  %{!r:%{!T*: %:if-exists-then-else(%:find-file(xilinx.ld) -dT xilinx.ld%s)}}"
 
 /* Specs for the compiler proper  */
 
