@@ -41,7 +41,7 @@
  */
 #undef LINK_LIBC_SPEC
 #define LINK_LIBC_SPEC							\
-  "%{!r:%{!T*: %:if-exists-then-else(%:find-file(" PICOLIBC_LD ") %T" PICOLIBC_LD ")}}"	\
+  "%{!r:%{!T*: %:if-exists-then-else(%:find-file(" PICOLIBC_LD ") -T" PICOLIBC_LD ")}}"	\
   " %{-printf=*:--defsym=" USER_LABEL_PREFIX "vfprintf=" USER_LABEL_PREFIX "__%*_vfprintf}" \
   " %{-scanf=*:--defsym=" USER_LABEL_PREFIX "vfscanf=" USER_LABEL_PREFIX "__%*_vfscanf}"
 
