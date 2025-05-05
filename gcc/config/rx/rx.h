@@ -109,14 +109,15 @@
 "
 
 #undef  LIB_SPEC
-#define LIB_SPEC "					\
---start-group						\
--lc							\
-%{msim:-lsim}%{!msim:-lnosys}				\
-%{fprofile-arcs|fprofile-generate|coverage:-lgcov} 	\
---end-group					   	\
-%{!r:%{!T*: %{msim:%Trx-sim.ld}%{!msim:%Trx.ld}}}	\
-"
+#define LIB_SPEC							\
+  "--start-group "							\
+  "-lc "								\
+  "%{msim:-lsim}%{!msim:-lnosys} "					\
+  "%{fprofile-arcs|fprofile-generate|coverage:-lgcov} "			\
+  "--end-group "							\
+  "%{!r:%{!T*:"								\
+  "%{msim:%:if-exists-then-else(%:find-file(rx-sim.ld) %Trx-sim.ld)}"	\
+  "%{!msim:%:if-exists-then-else(%:find-file(rx.ld) %Trx.ld)}}}"
 
 #undef  LINK_SPEC
 #define LINK_SPEC "%{mbig-endian-data:--oformat elf32-rx-be} %{mrelax:-relax}"
