@@ -23,3 +23,22 @@ $(out_object_file): gt-xtensa.h
 xtensa-dynconfig.o: $(srcdir)/config/xtensa/xtensa-dynconfig.cc
 	$(COMPILE) $<
 	$(POSTCOMPILE)
+
+XTENSA_CONFIG_H = $(srcdir)/ginclude/core-isa.h
+
+stmp-xtensa-int-hdrs: $(XTENSA_CONFIG_H)
+	-if [ -d include ] ; then true; else mkdir include; chmod a+rx include; fi
+	-if [ -d include/xtensa ] ; then true; else mkdir include/xtensa; chmod a+rx include/xtensa; fi
+	-if [ -d include/xtensa/config ] ; then true; else mkdir include/xtensa/config; chmod a+rx include/xtensa/config; fi
+	for file in .. $(XTENSA_CONFIG_H); do \
+	  if [ X$$file != X.. ]; then \
+	    realfile=`echo $$file | sed -e 's|.*/\([^/]*\)$$|\1|'`; \
+	    $(STAMP) include/xtensa/config/$$realfile; \
+	    rm -f include/xtensa/config/$$realfile; \
+	    cp $$file include/xtensa/config; \
+	    chmod a+r include/xtensa/config/$$realfile; \
+	  fi; \
+	done
+	$(STAMP) $@
+
+stmp-int-hdrs: stmp-xtensa-int-hdrs
