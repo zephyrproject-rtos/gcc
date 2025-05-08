@@ -6221,12 +6221,9 @@ case "$default_libc" in
 LIBC_PICOLIBC)
     # __cxa_atexit is provided.
     default_use_cxa_atexit=yes
-    use_gcc_stdint=wrap
+    # picolibc provides stdint.h
+    use_gcc_stdint=none
     tm_file="${tm_file} picolibc-spec.h"
     extra_options="${extra_options} picolibc.opt"
-    case "${with_newlib}-${with_headers}" in
-	no-no) use_gcc_stdint=provide ;;
-	*) ;;
-    esac
     ;;
 esac
