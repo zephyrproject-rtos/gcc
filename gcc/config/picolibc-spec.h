@@ -35,13 +35,13 @@
   " %{-scanf=*: -D_PICOLIBC_SCANF='%*'}"
 
 /*
- * Add picolibc.ld if not using -r or -T and we can find it.
+ * Add picolibc.ld if not using -shared, -r or -T and we can find it.
  * Define vfprintf if --printf is set
  * Define vfscanf if --scanf is set
  */
 #undef LINK_LIBC_SPEC
 #define LINK_LIBC_SPEC							\
-  "%{!r:%{!T*: %:if-exists-then-else(%:find-file(" PICOLIBC_LD ") -T" PICOLIBC_LD ")}}"	\
+  "%{!shared:%{!r:%{!T*: %:if-exists-then-else(%:find-file(" PICOLIBC_LD ") -T" PICOLIBC_LD ")}}}" \
   " %{-printf=*:--defsym=" USER_LABEL_PREFIX "vfprintf=" USER_LABEL_PREFIX "__%*_vfprintf}" \
   " %{-scanf=*:--defsym=" USER_LABEL_PREFIX "vfscanf=" USER_LABEL_PREFIX "__%*_vfscanf}"
 
