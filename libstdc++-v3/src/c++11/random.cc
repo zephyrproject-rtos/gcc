@@ -45,7 +45,7 @@
 #include <cstdio>
 #include <cctype> // For std::isdigit.
 
-#if defined _GLIBCXX_HAVE_UNISTD_H && defined _GLIBCXX_HAVE_FCNTL_H
+#if defined _GLIBCXX_HAVE_UNISTD_H && defined _GLIBCXX_HAVE_FCNTL_H && !defined _GLIBCXX_USE_STDIO_PURE
 # include <unistd.h>
 # include <fcntl.h>
 // Use POSIX open, close, read etc. instead of ISO fopen, fclose, fread
