@@ -318,7 +318,6 @@ case "${host}" in
  loongarch*)
     tmake_file="cpu/loongarch/t-loongarch"
     ;;
- *-*-linux* | *-*-uclinux*)
  *-zephyr-elf*)
     case "${host_cpu}" in
       i[567]86)
