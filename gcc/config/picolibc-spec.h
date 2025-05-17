@@ -29,8 +29,8 @@
 #define OS_CC1_SPEC " %{!ftls-model=*:-ftls-model=local-exec}"
 
 /* Pass along preprocessor definitions when --printf or --scanf are specified */
-#undef CPP_SPEC
-#define CPP_SPEC				\
+#undef LIBC_CPP_SPEC
+#define LIBC_CPP_SPEC				\
   "%{-printf=*: -D_PICOLIBC_PRINTF='%*'}"	\
   " %{-scanf=*: -D_PICOLIBC_SCANF='%*'}"
 
@@ -39,8 +39,8 @@
  * Define vfprintf if --printf is set
  * Define vfscanf if --scanf is set
  */
-#undef LINK_LIBC_SPEC
-#define LINK_LIBC_SPEC							\
+#undef LIBC_LINK_SPEC
+#define LIBC_LINK_SPEC							\
   "%{!shared:%{!r:%{!T*: %:if-exists-then-else(%:find-file(" PICOLIBC_LD ") -T" PICOLIBC_LD ")}}}" \
   " %{-printf=*:--defsym=" USER_LABEL_PREFIX "vfprintf=" USER_LABEL_PREFIX "__%*_vfprintf}" \
   " %{-scanf=*:--defsym=" USER_LABEL_PREFIX "vfscanf=" USER_LABEL_PREFIX "__%*_vfscanf}"
