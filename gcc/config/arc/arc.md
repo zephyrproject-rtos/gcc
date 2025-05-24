@@ -3398,7 +3398,17 @@ archs4x, archs4xd"
   [(set (match_operand:SI 0 "dest_reg_operand" "")
 	(ANY_SHIFT_ROTATE:SI (match_operand:SI 1 "register_operand" "")
 			     (match_operand:SI 2 "nonmemory_operand" "")))]
-  "")
+  ""
+{
+  /*
+   * Insert clobbers here as the arc_split_ functions aren't invoked
+   * until after CSE where these clobbers are needed.
+   */
+  if (!TARGET_BARREL_SHIFTER) {
+    emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(SImode, LP_COUNT)));
+    emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(CCmode, CC_REG)));
+  }
+})
 
 ; asl, asr, lsr patterns:
 ; There is no point in including an 'I' alternative since only the lowest 5
