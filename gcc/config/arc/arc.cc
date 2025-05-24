@@ -4580,6 +4580,8 @@ arc_split_ashr (rtx *operands)
       else if (n == 30)
 	{
 	  rtx tmp = gen_reg_rtx (SImode);
+	  emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(SImode, LP_COUNT)));
+	  emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(CCmode, CC_REG)));
 	  emit_insn (gen_add_f (tmp, operands[1], operands[1]));
 	  emit_insn (gen_sbc (operands[0], operands[0], operands[0]));
 	  emit_insn (gen_addsi_compare_2 (tmp, tmp));
@@ -4588,6 +4590,8 @@ arc_split_ashr (rtx *operands)
 	}
       else if (n == 31)
 	{
+	  emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(SImode, LP_COUNT)));
+	  emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(CCmode, CC_REG)));
 	  emit_insn (gen_addsi_compare_2 (operands[1], operands[1]));
 	  emit_insn (gen_sbc (operands[0], operands[0], operands[0]));
 	  return;
@@ -4626,6 +4630,8 @@ arc_split_lshr (rtx *operands)
       else if (n == 30)
 	{
 	  rtx tmp = gen_reg_rtx (SImode);
+	  emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(SImode, LP_COUNT)));
+	  emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(CCmode, CC_REG)));
 	  emit_insn (gen_add_f (tmp, operands[1], operands[1]));
 	  emit_insn (gen_scc_ltu_cc_c (operands[0]));
 	  emit_insn (gen_addsi_compare_2 (tmp, tmp));
@@ -4634,6 +4640,8 @@ arc_split_lshr (rtx *operands)
 	}
       else if (n == 31)
 	{
+	  emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(SImode, LP_COUNT)));
+	  emit_insn(gen_rtx_CLOBBER(VOIDmode, gen_rtx_REG(CCmode, CC_REG)));
 	  emit_insn (gen_addsi_compare_2 (operands[1], operands[1]));
 	  emit_insn (gen_scc_ltu_cc_c (operands[0]));
 	  return;
