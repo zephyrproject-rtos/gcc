@@ -1747,6 +1747,16 @@ Common Var(flag_gcse_after_reload) Optimization
 Perform global common subexpression elimination after register allocation has
 finished.
 
+foptimize-crc
+Common Var(flag_optimize_crc) Optimization
+Detect loops calculating CRC and replace with faster implementation.
+If the target supports CRC instruction and the CRC loop uses the same
+polynomial as the one used in the CRC instruction, directly replace with the
+corresponding CRC instruction.
+Otherwise, if the target supports carry-less-multiplication instruction,
+generate CRC using it.
+If neither case applies, generate table-based CRC.
+
 Enum
 Name(dwarf_gnat_encodings) Type(int)
 
@@ -3858,5 +3868,9 @@ Driver Joined Separate
 fipa-ra
 Common Var(flag_ipa_ra) Optimization
 Use caller save register across calls if possible.
+
+fext-dce
+Common Var(flag_ext_dce, 1) Optimization Init(0)
+Perform dead code elimination on zero and sign extensions with special dataflow analysis.
 
 ; This comment is to ensure we retain the blank line above.

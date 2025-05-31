@@ -58,6 +58,10 @@ enum riscv_microarchitecture_type {
   sifive_p400,
   sifive_p600,
   xiangshan,
+  arcv_rmx100,
+  arcv_rmx500,
+  arcv_rhx100,
+  arcv_rpx100,
   generic_ooo
 };
 extern enum riscv_microarchitecture_type riscv_microarchitecture;
@@ -81,6 +85,13 @@ enum rvv_max_lmul_enum {
   RVV_M8 = 8,
   /* For dynamic LMUL, we compare COST start with LMUL8.  */
   RVV_DYNAMIC = 9
+};
+
+/* ARC-V multiply option.  */
+enum arcv_mpy_option_enum {
+  ARCV_MPY_OPTION_1C = 1,
+  ARCV_MPY_OPTION_2C = 2,
+  ARCV_MPY_OPTION_10C = 8,
 };
 
 enum riscv_multilib_select_kind {

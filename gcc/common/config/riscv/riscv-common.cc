@@ -79,6 +79,21 @@ static const riscv_implied_info_t riscv_implied_info[] =
   {"f", "zicsr"},
   {"d", "zicsr"},
 
+  {"a", "zaamo"},
+  {"a", "zalrsc"},
+
+  {"c", "zca"},
+  {"c", "zcf",
+   [] (const riscv_subset_list *subset_list) -> bool
+   {
+     return subset_list->xlen () == 32 && subset_list->lookup ("f");
+   }},
+  {"c", "zcd",
+   [] (const riscv_subset_list *subset_list) -> bool
+   {
+     return subset_list->lookup ("d");
+   }},
+
   {"zdinx", "zfinx"},
   {"zfinx", "zicsr"},
   {"zdinx", "zicsr"},
@@ -178,15 +193,47 @@ static const riscv_implied_info_t riscv_implied_info[] =
   {"zcmp", "zca"},
   {"zcmt", "zca"},
   {"zcmt", "zicsr"},
-  {"zcf", "f",
+  {"zce", "zcf",
    [] (const riscv_subset_list *subset_list) -> bool
    {
      return subset_list->xlen () == 32 && subset_list->lookup ("f");
+   }},
+  {"zca", "c",
+   [] (const riscv_subset_list *subset_list) -> bool
+   {
+     /* For RV32 Zca implies C for one of these combinations of
+	extensions: Zca, F_Zca_Zcf and FD_Zca_Zcf_Zcd.  */
+     if (subset_list->xlen () == 32)
+       {
+	 if (subset_list->lookup ("d"))
+	   return subset_list->lookup ("zcf") && subset_list->lookup ("zcd");
+
+	 if (subset_list->lookup ("f"))
+	   return subset_list->lookup ("zcf");
+
+	 return true;
+       }
+
+     /* For RV64 Zca implies C for one of these combinations of
+	extensions: Zca and FD_Zca_Zcd (Zcf is not available
+	for RV64).  */
+     if (subset_list->xlen () == 64)
+       {
+	 if (subset_list->lookup ("d"))
+	   return subset_list->lookup ("zcd");
+
+	 return true;
+       }
+
+     /* Do nothing for future RV128 specification. Behaviour
+	for this case is not yet well defined.  */
+     return false;
    }},
 
   {"smaia", "ssaia"},
   {"smstateen", "ssstateen"},
   {"smepmp", "zicsr"},
+  {"smrnmi", "zicsr"},
   {"ssaia", "zicsr"},
   {"sscofpmf", "zicsr"},
   {"ssstateen", "zicsr"},
@@ -252,6 +299,8 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"za64rs",  ISA_SPEC_CLASS_NONE, 1, 0},
   {"za128rs", ISA_SPEC_CLASS_NONE, 1, 0},
   {"zawrs", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zaamo", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zalrsc", ISA_SPEC_CLASS_NONE, 1, 0},
 
   {"zba", ISA_SPEC_CLASS_NONE, 1, 0},
   {"zbb", ISA_SPEC_CLASS_NONE, 1, 0},
@@ -351,6 +400,7 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
 
   {"smaia",     ISA_SPEC_CLASS_NONE, 1, 0},
   {"smepmp",    ISA_SPEC_CLASS_NONE, 1, 0},
+  {"smrnmi",    ISA_SPEC_CLASS_NONE, 1, 0},
   {"smstateen", ISA_SPEC_CLASS_NONE, 1, 0},
 
   {"ssaia",     ISA_SPEC_CLASS_NONE, 1, 0},
@@ -1527,9 +1577,11 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   {"zifencei", &gcc_options::x_riscv_zi_subext, MASK_ZIFENCEI},
   {"zicond",   &gcc_options::x_riscv_zi_subext, MASK_ZICOND},
 
-  {"za64rs", &gcc_options::x_riscv_za_subext, MASK_ZA64RS},
+  {"za64rs",  &gcc_options::x_riscv_za_subext, MASK_ZA64RS},
   {"za128rs", &gcc_options::x_riscv_za_subext, MASK_ZA128RS},
-  {"zawrs", &gcc_options::x_riscv_za_subext, MASK_ZAWRS},
+  {"zawrs",   &gcc_options::x_riscv_za_subext, MASK_ZAWRS},
+  {"zaamo",   &gcc_options::x_riscv_za_subext, MASK_ZAAMO},
+  {"zalrsc",  &gcc_options::x_riscv_za_subext, MASK_ZALRSC},
 
   {"zba",    &gcc_options::x_riscv_zb_subext, MASK_ZBA},
   {"zbb",    &gcc_options::x_riscv_zb_subext, MASK_ZBB},
