@@ -30,6 +30,9 @@ along with GCC; see the file COPYING3.  If not see
 /* Target CPU builtins.  */
 #define TARGET_CPU_CPP_BUILTINS() riscv_cpu_cpp_builtins (pfile)
 
+/* Zephyr toolchain wants strict aligned accesses by default */
+#define TARGET_DEFAULT_TARGET_FLAGS (TARGET_DEFAULT | MASK_STRICT_ALIGN)
+
 #ifdef TARGET_BIG_ENDIAN_DEFAULT
 #define DEFAULT_ENDIAN_SPEC    "b"
 #else
