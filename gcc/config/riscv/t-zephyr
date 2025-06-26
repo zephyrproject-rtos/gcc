@@ -119,6 +119,7 @@ march.rv64imafdc_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64imafdc_zicsr
 march.rv64imafdc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64d/mcmodel.medany=march.rv64imafdc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64d \
 march.rv64imafd_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64imafd_zicsr_zifencei/mabi.lp64d \
 march.rv64imfc_zicsr_zifencei/mabi.lp64f/mcmodel.medany=march.rv64imfc_zicsr_zifencei/mabi.lp64f \
+march.rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64f/mcmodel.medany=march.rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64f \
 march.rv64i_zicsr_zifencei/mabi.lp64/mcmodel.medany=march.rv64ia_zicsr_zifencei/mabi.lp64/mcmodel.medany \
 march.rv64i_zicsr_zifencei/mabi.lp64/mcmodel.medany=march.rv64ia_zicsr_zifencei/mabi.lp64 \
 march.rv64i_zicsr_zifencei/mabi.lp64/mcmodel.medany=march.rv64iac_zicsr_zifencei/mabi.lp64/mcmodel.medany \
