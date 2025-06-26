@@ -43,6 +43,7 @@ MULTILIB_SRC_ARCH += rv64imac_zicsr_zifencei_zba_zbb_zbc_zbs
 MULTILIB_SRC_ARCH += rv64imafd_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64imafdc_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64imafdc_zicsr_zifencei_zba_zbb_zbc_zbs
+MULTILIB_SRC_ARCH += rv64imafdcv_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64imc_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64imc_zicsr_zifencei_zba_zbb_zbc_zbs
 MULTILIB_SRC_ARCH += rv64imfc_zicsr_zifencei
@@ -53,6 +54,7 @@ MULTILIB_SRC_ARCH += rv64ic_zicsr_zifencei
 MULTILIB_SRC_ARCH += rv64g
 MULTILIB_SRC_ARCH += rv64gc
 MULTILIB_SRC_ARCH += rv64gc_zba_zbb_zbc_zbs
+MULTILIB_SRC_ARCH += rv64gcv
 
 MULTILIB_SRC_ABI  = ilp32
 MULTILIB_SRC_ABI += ilp32f
@@ -90,6 +92,8 @@ march=rv64imac_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64/mcmodel=medany \
 march=rv64imafdc_zicsr_zifencei/mabi=lp64d/mcmodel=medany \
 march=rv64imafdc_zicsr_zifencei/mabi=lp64d/mcmodel=large \
 march=rv64imafdc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64d/mcmodel=medany \
+march=rv64imafdcv_zicsr_zifencei/mabi=lp64d/mcmodel=medany \
+march=rv64imafdcv_zicsr_zifencei/mabi=lp64d/mcmodel=large \
 march=rv64imafd_zicsr_zifencei/mabi=lp64d/mcmodel=medany \
 march=rv64imfc_zicsr_zifencei/mabi=lp64f/mcmodel=medany \
 march=rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64f/mcmodel=medany
@@ -123,6 +127,7 @@ march.rv64imac_zicsr_zifencei/mabi.lp64/mcmodel.medany=march.rv64imac_zicsr_zife
 march.rv64imac_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64/mcmodel.medany=march.rv64imac_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64 \
 march.rv64imafdc_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64imafdc_zicsr_zifencei/mabi.lp64d \
 march.rv64imafdc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64d/mcmodel.medany=march.rv64imafdc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64d \
+march.rv64imafdcv_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64imafdcv_zicsr_zifencei/mabi.lp64d \
 march.rv64imafd_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64imafd_zicsr_zifencei/mabi.lp64d \
 march.rv64imfc_zicsr_zifencei/mabi.lp64f/mcmodel.medany=march.rv64imfc_zicsr_zifencei/mabi.lp64f \
 march.rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64f/mcmodel.medany=march.rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64f \
@@ -145,6 +150,9 @@ march.rv64imafdc_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64gc/mabi.lp64
 march.rv64imafdc_zicsr_zifencei/mabi.lp64d/mcmodel.large=march.rv64gc/mabi.lp64d/mcmodel.large \
 march.rv64imafdc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64d/mcmodel.medany=march.rv64gc_zba_zbb_zbc_zbs/mabi.lp64d/mcmodel.medany \
 march.rv64imafdc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi.lp64d/mcmodel.medany=march.rv64gc_zba_zbb_zbc_zbs/mabi.lp64d \
+march.rv64imafdcv_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64gcv/mabi.lp64d/mcmodel.medany \
+march.rv64imafdcv_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64gcv/mabi.lp64d \
+march.rv64imafdcv_zicsr_zifencei/mabi.lp64d/mcmodel.large=march.rv64gcv/mabi.lp64d/mcmodel.large \
 march.rv64imafd_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64g/mabi.lp64d/mcmodel.medany \
 march.rv64imafd_zicsr_zifencei/mabi.lp64d/mcmodel.medany=march.rv64g/mabi.lp64d
 
