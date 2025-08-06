@@ -19371,6 +19371,8 @@ static const struct aarch64_attribute_info aarch64_attributes[] =
      OPT_msign_return_address_ },
   { "outline-atomics", aarch64_attr_bool, true, NULL,
      OPT_moutline_atomics},
+  { "simd-memops", aarch64_attr_bool, true, NULL,
+     OPT_msimd_memops},
   { NULL, aarch64_attr_custom, false, NULL, OPT____ }
 };
 
@@ -26652,8 +26654,8 @@ aarch64_expand_cpymem (rtx *operands, bool is_memmove)
     return aarch64_expand_cpymem_mops (operands, is_memmove);
 
   unsigned HOST_WIDE_INT size = UINTVAL (operands[2]);
-  bool use_ldpq = TARGET_SIMD && !(aarch64_tune_params.extra_tuning_flags
-				   & AARCH64_EXTRA_TUNE_NO_LDP_STP_QREGS);
+  bool use_ldpq = TARGET_SIMD_MEMOPS && !(aarch64_tune_params.extra_tuning_flags
+					  & AARCH64_EXTRA_TUNE_NO_LDP_STP_QREGS);
 
   /* Set inline limits for memmove/memcpy.  MOPS has a separate threshold.  */
   unsigned max_copy_size = use_ldpq ? 256 : 128;
@@ -26673,7 +26675,7 @@ aarch64_expand_cpymem (rtx *operands, bool is_memmove)
      ??? Although it would be possible to use LDP/STP Qn in streaming mode
      (so using TARGET_BASE_SIMD instead of TARGET_SIMD), it isn't clear
      whether that would improve performance.  */
-  bool use_qregs = size > 24 && TARGET_SIMD;
+  bool use_qregs = size > 24 && TARGET_SIMD_MEMOPS;
 
   base = copy_to_mode_reg (Pmode, XEXP (dst, 0));
   dst = adjust_automodify_address (dst, VOIDmode, base, 0);
@@ -26814,7 +26816,7 @@ aarch64_expand_setmem (rtx *operands)
   machine_mode cur_mode = BLKmode, next_mode;
 
   /* Variable-sized or strict-align memset may use the MOPS expansion.  */
-  if (!CONST_INT_P (operands[1]) || !TARGET_SIMD
+  if (!CONST_INT_P (operands[1]) || !TARGET_SIMD_MEMOPS
       || (STRICT_ALIGNMENT && align < 16))
     return aarch64_expand_setmem_mops (operands);
 

@@ -133,6 +133,10 @@ aarch64_handle_option (struct gcc_options *opts,
       opts->x_aarch64_flag_outline_atomics = val;
       return true;
 
+    case OPT_msimd_memops:
+      opts->x_aarch64_flag_simd_memops = val;
+      return true;
+
     default:
       return true;
     }

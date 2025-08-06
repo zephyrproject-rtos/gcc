@@ -807,7 +807,7 @@ Objective-C and Objective-C++ Dialects}.
 -moverride=@var{string}  -mverbose-cost-dump
 -mstack-protector-guard=@var{guard} -mstack-protector-guard-reg=@var{sysreg}
 -mstack-protector-guard-offset=@var{offset} -mtrack-speculation
--moutline-atomics -mearly-ldp-fusion -mlate-ldp-fusion}
+-moutline-atomics -mearly-ldp-fusion -mlate-ldp-fusion -msimd-memops}
 
 @emph{Adapteva Epiphany Options}
 @gccoptlist{-mhalf-reg-file  -mprefer-short-insn-regs
@@ -21355,6 +21355,14 @@ instruction set.  If using a later revision, e.g. @option{-march=armv8.1-a}
 or @option{-march=armv8-a+lse}, the ARMv8.1-Atomics instructions will be
 used directly.  The same applies when using @option{-mcpu=} when the
 selected cpu supports the @samp{lse} feature.
+This option is on by default.
+
+@item -msimd-memops
+@itemx -mno-simd-memops
+Enable or disable use of Advanced SIMD registers when expanding memory
+copy and memory set operations. Use of these registers can improve
+performance and reduce instruction count for these operations. This
+option is ignored unless Advanced SIMD registers are available.
 This option is on by default.
 
 @opindex march

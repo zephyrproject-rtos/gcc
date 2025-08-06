@@ -332,6 +332,10 @@ moutline-atomics
 Target Var(aarch64_flag_outline_atomics) Init(2) Save
 Generate local calls to out-of-line atomic operations.
 
+msimd-memops
+Target Var(aarch64_flag_simd_memops) Init(AARCH64_SIMD_MEMOPS_DEFAULT) Save
+Allow use of SIMD registers in memory set/copy expansions.
+
 -param=aarch64-vect-compare-costs=
 Target Joined UInteger Var(aarch64_vect_compare_costs) Init(1) IntegerRange(0, 1) Param
 When vectorizing, consider using multiple different approaches and use
