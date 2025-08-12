@@ -3580,14 +3580,16 @@ __extension__ extern __inline  uint64_t
 __attribute__ ((__always_inline__, __gnu_inline__, __artificial__))
 __arm_lsll (uint64_t value, int32_t shift)
 {
-  return (value << shift);
+  __asm__("lsll %Q0, %R0, %1" : "+r" (value) : "rPg" (shift));
+  return value;
 }
 
 __extension__ extern __inline int64_t
 __attribute__ ((__always_inline__, __gnu_inline__, __artificial__))
 __arm_asrl (int64_t value, int32_t shift)
 {
-  return (value >> shift);
+  __asm__("asrl %Q0, %R0, %1" : "+r" (value) : "rPg" (shift));
+  return value;
 }
 
 __extension__ extern __inline uint64_t
