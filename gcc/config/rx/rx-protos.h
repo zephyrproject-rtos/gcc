@@ -25,6 +25,14 @@ extern bool             rx_can_use_simple_return (void);
 extern void		rx_expand_epilogue (bool);
 extern void		rx_expand_prologue (void);
 extern int		rx_initial_elimination_offset (int, int);
+extern void		rx_register_pragmas (void);
+extern void 		rx_note_pragma_address (const char *varname, unsigned address);
+extern void		rx_output_aligned_common (FILE *stream, tree decl ATTRIBUTE_UNUSED, const char *name,int size, int align);
+extern void             rx_adjust_reg_alloc_order (void);
+extern enum reg_class  rx_regno_class (int);
+extern bool  rx_hard_regno_mode_ok (unsigned regno, machine_mode mode);
+extern unsigned int  rx_regmode_natural_size (enum machine_mode mode);
+extern unsigned int rx_dbx_register_number (unsigned int);
 
 bool is_interrupt_func (const_tree decl);
 bool is_fast_interrupt_func (const_tree decl);
@@ -53,6 +61,7 @@ extern int		rx_adjust_insn_length (rtx_insn *, int);
 extern align_flags	rx_align_for_label (rtx_insn *, int);
 extern void             rx_emit_stack_popm (rtx *, bool);
 extern void             rx_emit_stack_pushm (rtx *);
+extern void             rx_emit_stack_dpushm (rtx *);
 extern char *		rx_gen_move_template (rtx *, bool);
 extern bool		rx_is_legitimate_constant (machine_mode, rtx);
 extern bool		rx_is_restricted_memory_address (rtx,

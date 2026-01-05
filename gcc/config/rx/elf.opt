@@ -34,7 +34,7 @@ Generate assembler output that is compatible with the Renesas AS100 assembler.  
 ;---------------------------------------------------
 
 mint-register=
-Target RejectNegative Joined UInteger Var(rx_interrupt_registers) Init(0)
+Target RejectNegative Joined UInteger Var(rx_deferred_options) Defer
 Specifies the number of registers to reserve for interrupt handlers.
 
 ;---------------------------------------------------

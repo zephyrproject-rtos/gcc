@@ -3254,6 +3254,8 @@ rx-*-elf*)
 	        tmake_file="${tmake_file} rx/t-rx"
 		;;
 	esac
+	c_target_objs="rx-pragma.o"
+	cxx_target_objs="rx-pragma.o"
 	extra_options="${extra_options} rx/elf.opt"
 	;;
 rx-*-linux*)

@@ -22,10 +22,38 @@
 
 enum rx_cpu_types
 {
+  RX13T,
+  RX230,
+  RX71M,
+  RX72T,
+  RX64M,
   RX600,
   RX610,
+  RX66T,
   RX200,
-  RX100
+  RX100,
+  RX140,
+  RX_CPUUNINIT
+};
+enum rx_tfu_versions
+{
+  RX_TFUV1,
+  RX_TFUV2,
+  RX_TFUVUNINIT
+};
+enum rx_isa_versions
+{
+  RX_ISAV1,
+  RX_ISAV2,
+  RX_ISAV3,
+  RX_ISAUNINIT
+};
+
+enum rx_tfu_types
+{
+  RX_INTRINSIC,
+  RX_MATHLIB,
+  RX_TFUUNINIT
 };
 
 #endif
