@@ -45,6 +45,53 @@
           builtin_assert ("machine=RX600");	\
         }					\
 						\
+   if (rx_cpu_type == RX66T)			\
+   {					\
+	   builtin_define ("__RX66T__");		\
+       builtin_assert ("machine=RX66T");	\
+   }					\
+   if (rx_cpu_type == RX64M)      \
+   {          \
+     builtin_define ("__RX64M__");    \
+       builtin_assert ("machine=RX64M");  \
+   }          \
+   if (rx_cpu_type == RX71M)			\
+   {					\
+	   builtin_define ("__RX71M__");		\
+       builtin_assert ("machine=RX71M");	\
+   }					\
+   if (rx_cpu_type == RX72T)      \
+   {          \
+     builtin_define ("__RX72T__");    \
+       builtin_assert ("machine=RX72T");  \
+   }          \
+   if (rx_cpu_type == RX230)			\
+   {					\
+	   builtin_define ("__RX230__");		\
+       builtin_assert ("machine=RX230");	\
+   }					\
+   if (rx_cpu_type == RX13T)     \
+   {          \
+     builtin_define ("__RX13T__");    \
+       builtin_assert ("machine=R13T");  \
+   }          \
+   if (rx_cpu_type == RX140)     \
+   {          \
+     builtin_define ("__RX140__");    \
+       builtin_assert ("machine=RX140");  \
+   }          \
+   if (rx_isa_version == RX_ISAV2) \
+   { 					\
+   	  builtin_define ("__RXv2__");		\
+   }					\
+   else if (rx_isa_version == RX_ISAV3)				\
+   {					\
+   	   builtin_define ("__RXv3__");		\
+   }				\
+   else        \
+   {          \
+       builtin_define ("__RXv1__");   \
+   }        \
       if (TARGET_BIG_ENDIAN_DATA)		\
 	builtin_define ("__RX_BIG_ENDIAN__");	\
       else					\
@@ -58,28 +105,49 @@
       if (ALLOW_RX_FPU_INSNS)			\
 	builtin_define ("__RX_FPU_INSNS__");	\
 						\
+	 if(flag_dfpu)                      \
+	builtin_define ("__RX_DFPU_INSNS__");	\
+						\
+      /* Override __LIBGCC_HAVE_HWDBL__ from common code */ \
+      /* Only define when we have both DFPU and 64-bit doubles */ \
+      cpp_undef (pfile, "__LIBGCC_HAVE_HWDBL__");	\
+      if (flag_dfpu && TARGET_64BIT_DOUBLES)		\
+	builtin_define ("__LIBGCC_HAVE_HWDBL__");	\
+						\
+      if (TARGET_TFU)                           \
+        builtin_define_with_int_value ("__TFU", \
+         (rx_tfu_version == RX_TFUV2) ? 2 : 1); \
+                                                \
       if (TARGET_AS100_SYNTAX)			\
 	builtin_define ("__RX_AS100_SYNTAX__"); \
       else					\
 	builtin_define ("__RX_GAS_SYNTAX__");   \
 						\
-      if (TARGET_GCC_ABI)			\
-	builtin_define ("__RX_GCC_ABI__");	\
-      else					\
 	builtin_define ("__RX_ABI__");		\
 						\
       if (rx_allow_string_insns)		\
 	builtin_define ("__RX_ALLOW_STRING_INSNS__"); \
       else					\
 	builtin_define ("__RX_DISALLOW_STRING_INSNS__");\
-    }                                           \
+             \
+      if (rx_tfu_type == RX_MATHLIB)                  \
+      {                                               \
+  builtin_define_with_value("sinf(x)", "__builtin_rx_sinf(x)", 0);            \
+  builtin_define_with_value("cosf(x)", "__builtin_rx_cosf(x)", 0);             \
+  builtin_define_with_value("atan2f(x, y)", "__builtin_rx_atan2f(x,y)", 0);    \
+  builtin_define_with_value("hypotf(x, y)", "__builtin_rx_hypotf(x, y)", 0);   \
+      }                                               \
+    }                                             \
   while (0)
 
+#define TARGET_RXV1 ((rx_isa_version == RX_ISAV1) || (rx_isa_version == RX_ISAV2) || (rx_isa_version == RX_ISAV3))
+#define TARGET_RXV2 ((rx_isa_version == RX_ISAV2) || (rx_isa_version == RX_ISAV3))
+#define TARGET_RXV3 ((rx_isa_version == RX_ISAV3))
+
+#define TARGET_TFU ((rx_tfu_type == RX_INTRINSIC) || (rx_tfu_type == RX_MATHLIB))
+
 #undef  CC1_SPEC
-#define CC1_SPEC "\
-  %{mas100-syntax:%{gdwarf*:%e-mas100-syntax is incompatible with -gdwarf}} \
-  %{mcpu=rx100:%{fpu:%erx100 cpu does not have FPU hardware}} \
-  %{mcpu=rx200:%{fpu:%erx200 cpu does not have FPU hardware}}"
+#define CC1_SPEC "%{mas100-syntax:%{gdwarf*:%e-mas100-syntax is incompatible with -gdwarf}}"
 
 #undef  STARTFILE_SPEC
 #define STARTFILE_SPEC "%{pg:gcrt0.o%s}%{!pg:crt0.o%s} crtbegin.o%s"
@@ -98,29 +166,35 @@
 #define ASM_SPEC "\
 %{mbig-endian-data:-mbig-endian-data} \
 %{m64bit-doubles:-m64bit-doubles} \
-%{!m64bit-doubles:-m32bit-doubles} \
+%{mdfpu:-m64bit-doubles} \
+%{!m64bit-doubles: %{!mdfpu: -m32bit-doubles}} \
 %{msmall-data-limit*:-msmall-data-limit} \
 %{mrelax:-relax} \
 %{mpid} \
 %{mno-allow-string-insns} \
 %{mint-register=*} \
-%{mgcc-abi:-mgcc-abi} %{!mgcc-abi:-mrx-abi} \
 %{mcpu=*} \
+%{misa=*} \
+%{mdfpu:-dfpu} \
 "
 
 #undef  LIB_SPEC
-#define LIB_SPEC							\
-  "--start-group "							\
-  "-lc "								\
-  "%{msim:-lsim}%{!msim:-lnosys} "					\
-  "%{fprofile-arcs|fprofile-generate|coverage:-lgcov} "			\
-  "--end-group "							\
-  "%{!r:%{!T*:"								\
-  "%{msim:%:if-exists-then-else(%:find-file(rx-sim.ld) %Trx-sim.ld)}"	\
-  "%{!msim:%:if-exists-then-else(%:find-file(rx.ld) %Trx.ld)}}}"
+#define LIB_SPEC "					\
+--start-group						\
+-lc							\
+%{msim:-lsim}%{!msim:-lnosys}				\
+%{fprofile-arcs|fprofile-generate|coverage:-lgcov} 	\
+--end-group					   	\
+%{!T*: %{msim:%Trx-sim.ld}%{!msim:%Trx.ld}}		\
+"
 
 #undef  LINK_SPEC
-#define LINK_SPEC "%{mbig-endian-data:--oformat elf32-rx-be} %{mrelax:-relax}"
+#define LINK_SPEC " \
+%{mbig-endian-data:--oformat elf32-rx-be} \
+%{mrelax:-relax} \
+%{Os:%{!r:--gc-sections}} \
+%{Os:-relax} \
+"
 
 
 #define BITS_BIG_ENDIAN 		0
@@ -141,13 +215,13 @@
 
 /* RX load/store instructions can handle unaligned addresses.  */
 #define STRICT_ALIGNMENT 		0
-#define FUNCTION_BOUNDARY 		((rx_cpu_type == RX100 || rx_cpu_type == RX200) ? 4 : 8)
+#define FUNCTION_BOUNDARY 		((rx_cpu_type == RX100 || rx_cpu_type == RX13T || rx_cpu_type == RX140 || rx_cpu_type == RX200) ? 4 : 8)
 #define BIGGEST_ALIGNMENT 		32
 #define STACK_BOUNDARY 			32
 #define PARM_BOUNDARY 			8
 
 #define STACK_GROWS_DOWNWARD		1
-#define FRAME_GROWS_DOWNWARD		0
+#define FRAME_GROWS_DOWNWARD		(flag_stack_protect)
 #define FIRST_PARM_OFFSET(FNDECL) 	0
 
 #define MAX_REGS_PER_ADDRESS 		2
@@ -180,11 +254,14 @@
 #define STORE_FLAG_VALUE		1
 #define LOAD_EXTEND_OP(MODE)		SIGN_EXTEND
 #define SHORT_IMMEDIATES_SIGN_EXTEND	1
+
+#define IS_DFPU flag_dfpu
 
 enum reg_class
 {
   NO_REGS,			/* No registers in set.  */
   GR_REGS,			/* Integer registers.  */
+  DOUBLE_REGS,  /* Double registers. */
   ALL_REGS,			/* All registers.  */
   LIM_REG_CLASSES		/* Max value + 1.  */
 };
@@ -193,14 +270,16 @@ enum reg_class
 {							\
   "NO_REGS",						\
   "GR_REGS",						\
+  "DOUBLE_REGS",        \
   "ALL_REGS"						\
 }
 
 #define REG_CLASS_CONTENTS				\
 {							\
-  { 0x00000000 },	/* No registers,  */		\
-  { 0x0000ffff },	/* Integer registers.  */	\
-  { 0x0000ffff }	/* All registers.  */		\
+  { 0x00000000, 0x00000000 },	/* No registers,  */		\
+  { 0x0000ffff, 0x00000000 },	/* Integer registers.  */	\
+  { 0xffff0000, 0x0000ffff }, /* Double registers.  */      \
+  { 0xffffffff, 0x0000ffff }	/* All registers.  */		\
 }
 
 #define N_REG_CLASSES			(int) LIM_REG_CLASSES
@@ -212,19 +291,19 @@ enum reg_class
 #define BASE_REG_CLASS  		GR_REGS
 #define INDEX_REG_CLASS			GR_REGS
 
-#define FIRST_PSEUDO_REGISTER 		17
+#define FIRST_PSEUDO_REGISTER 	  49
+#define FIRST_DOUBLE_REG          16
 
-#define REGNO_REG_CLASS(REGNO)          ((REGNO) < FIRST_PSEUDO_REGISTER \
-					 ? GR_REGS : NO_REGS)
+#define REGNO_REG_CLASS(REGNO)   rx_regno_class (REGNO)
 
 #define STACK_POINTER_REGNUM 	        0
 #define FUNC_RETURN_REGNUM              1
-#define FRAME_POINTER_REGNUM 		6
+#define FRAME_POINTER_REGNUM 		10
 #define ARG_POINTER_REGNUM 		7
-#define STATIC_CHAIN_REGNUM 		8
-#define TRAMPOLINE_TEMP_REGNUM		9
+#define STATIC_CHAIN_REGNUM 		14
+#define TRAMPOLINE_TEMP_REGNUM		5
 #define STRUCT_VAL_REGNUM		15
-#define CC_REGNUM                       16
+#define CC_REGNUM                       48
 
 /* This is the register which will probably be used to hold the address of
    the start of the small data area, if -msmall-data-limit is being used,
@@ -254,12 +333,22 @@ enum reg_class
 
 #define FIXED_REGISTERS					\
 {							\
-  1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1	\
+  1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+  /* DFPU */ \
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+  /* cc */ \
+  1 \
 }
 
 #define CALL_USED_REGISTERS				\
 {							\
-  1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1	\
+  1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,\
+  /* DFPU */ \
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, \
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, \
+  /* cc */ \
+  1 \
 }
 
 #define LIBCALL_VALUE(MODE)				\
@@ -272,10 +361,23 @@ enum reg_class
 	       FUNC_RETURN_REGNUM)
 
 /* Order of allocation of registers.  */
+#define REG_ALLOC_ORDER						   \
+{       7, 10, 11, 12, 13, 14,  4,  3,  2,  1,  9,  8,  6,  5, 15, \
+   16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, \
+   17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47  \
+ }
 
-#define REG_ALLOC_ORDER						\
-{  7,  10,  11,  12,  13,  14,  4,  3,  2,  1, 9, 8, 6, 5, 15	\
-}
+/*DFPU registers can only work in double mode */
+
+/*#define CANNOT_CHANGE_MODE_CLASS(FROM, TO, CLASS)		\
+  (GET_MODE_SIZE (FROM) != GET_MODE_SIZE (TO)			\
+   ? reg_classes_intersect_p (DOUBLE_REGS, CLASS) : 0)*/
+
+
+/* We must somehow disable register remapping for interrupt functions.  */
+extern char rx_leaf_registers[];
+#define LEAF_REGISTERS rx_leaf_registers
+#define LEAF_REG_REMAP(REG) (REG)
 
 #define REGNO_IN_RANGE(REGNO, MIN, MAX)		\
   (IN_RANGE ((REGNO), (MIN), (MAX)) 		\
@@ -329,10 +431,16 @@ typedef unsigned int CUMULATIVE_ARGS;
     fprintf (FILE, "\tbsr\t__mcount\n");
 
 
+
 #define REGISTER_NAMES						\
   {								\
     "r0",  "r1",  "r2",   "r3",   "r4",   "r5",   "r6",   "r7",	\
-      "r8",  "r9",  "r10",  "r11",  "r12",  "r13",  "r14",  "r15", "cc"	\
+      "r8",  "r9",  "r10",  "r11",  "r12",  "r13",  "r14",  "r15", \
+      "dr0",  "", "dr1",  "", "dr2",  "", "dr3", "", \
+	  "dr4",  "", "dr5",  "", "dr6",  "", "dr7", "", \
+      "dr8",  "", "dr9",  "", "dr10", "", "dr11", "", \
+	  "dr12", "", "dr13", "", "dr14", "", "dr15", "", \
+	  "cc" \
   }
 
 #define ADDITIONAL_REGISTER_NAMES	\
@@ -437,8 +545,13 @@ typedef unsigned int CUMULATIVE_ARGS;
 	  else					\
 	    fprintf (STREAM, "\t.ALIGN 2\n");	\
 	}					\
-      else					\
-	fprintf (STREAM, "\t.balign %d,3,%d\n", 1 << (LOG), (MAX_SKIP));	\
+      else 					\
+	{					\
+	  if (TARGET_NOBALIGN)			\
+	    fprintf (STREAM, "\t;.balign %d,3,%d\n", 1 << (LOG), (MAX_SKIP));	\
+	  else 					\
+	    fprintf (STREAM, "\t.balign %d,3,%d\n", 1 << (LOG), (MAX_SKIP));	\
+	}					\
     }						\
   while (0)
 
@@ -455,7 +568,12 @@ typedef unsigned int CUMULATIVE_ARGS;
 	    fprintf (STREAM, "\t.ALIGN 2\n");	\
 	}					\
       else					\
-	fprintf (STREAM, "\t.balign %d\n", 1 << (LOG));	\
+	{					\
+	  if (TARGET_NOBALIGN)			\
+	    fprintf (STREAM, "\t;.balign %d\n", 1 << (LOG));	\
+	  else					\
+	    fprintf (STREAM, "\t.balign %d\n", 1 << (LOG));	\
+	}					\
     }						\
   while (0)
 
@@ -627,15 +745,21 @@ typedef unsigned int CUMULATIVE_ARGS;
 #define DWARF2_DEBUGGING_INFO 1
 
 #define INCOMING_FRAME_SP_OFFSET		4
-#define ARG_POINTER_CFA_OFFSET(FNDECL)		4
+#define ARG_POINTER_CFA_OFFSET(FNDECL)		0
+#define FRAME_POINTER_CFA_OFFSET(FNDECL)	(FRAME_GROWS_DOWNWARD ? 0 : rx_initial_elimination_offset (ARG_POINTER_REGNUM, FRAME_POINTER_REGNUM))
+
 
 #define TARGET_USE_FPU		(! TARGET_NO_USE_FPU)
+
+#define ALLOW_HW_SQRT (TARGET_RXV2 && TARGET_RX_SQRT)
 
 /* This macro is used to decide when RX FPU instructions can be used.  */
 #define ALLOW_RX_FPU_INSNS	(TARGET_USE_FPU)
 
 #define BRANCH_COST(SPEED,PREDICT)       1
 #define REGISTER_MOVE_COST(MODE,FROM,TO) 2
+
+#define NO_FUNCTION_CSE 1
 
 #define SELECT_CC_MODE(OP,X,Y)  rx_select_cc_mode(OP, X, Y)
 
@@ -645,3 +769,15 @@ typedef unsigned int CUMULATIVE_ARGS;
       (LENGTH) = rx_adjust_insn_length ((INSN), (LENGTH));	\
     }								\
   while (0)
+
+#define ADJUST_REG_ALLOC_ORDER rx_adjust_reg_alloc_order ()
+
+#undef ASM_OUTPUT_ALIGNED_DECL_COMMON
+#define ASM_OUTPUT_ALIGNED_DECL_COMMON(STREAM, DECL, NAME, SIZE, ALIGNMENT) \
+	rx_output_aligned_common (STREAM, DECL, NAME, SIZE, ALIGNMENT)
+
+#define REGISTER_TARGET_PRAGMAS() rx_register_pragmas()
+
+#define DBX_REGISTER_NUMBER(regno) rx_dbx_register_number(regno)
+
+#define PC_REGNUM 49

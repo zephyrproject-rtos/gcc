@@ -24,12 +24,14 @@ config/rx/rx-opts.h
 
 ; The default is -fpu -m32bit-doubles.
 
+; -dfpu enables -m64bit-doubles.
+
 m64bit-doubles
 Target RejectNegative Mask(64BIT_DOUBLES)
 Store doubles in 64 bits.
 
 m32bit-doubles
-Target RejectNegative InverseMask(64BIT_DOUBLES)
+Target RejectNegative Mask(32BIT_DOUBLES)
 Stores doubles in 32 bits.  This is the default.
 
 nofpu
@@ -43,10 +45,27 @@ fpu
 Target RejectNegative InverseMask(NO_USE_FPU)
 Enable the use of RX FPU instructions.  This is the default.
 
+mdfpu
+Target RejectNegative Var(flag_dfpu) Init(0)
+Enable the use of RX DFPU instructions.
+
+mtfu=
+Target RejectNegative Joined Var(rx_tfu_type) ToLower Enum(rx_tfu_types) Init(RX_TFUUNINIT)
+Enable the use of RX TFU instructions.
+
+Enum
+Name(rx_tfu_types) Type(enum rx_tfu_types)
+
+EnumValue
+Enum(rx_tfu_types) String(intrinsic) Value(RX_INTRINSIC)
+
+EnumValue
+Enum(rx_tfu_types) String(intrinsic,mathlib) Value(RX_MATHLIB)
+
 ;---------------------------------------------------
 
 mcpu=
-Target RejectNegative Joined Var(rx_cpu_type) ToLower Enum(rx_cpu_types) Init(RX600)
+Target RejectNegative Joined Var(rx_cpu_type) ToLower Enum(rx_cpu_types) Init(RX_CPUUNINIT)
 Specify the target RX cpu type.
 
 Enum
@@ -63,6 +82,66 @@ Enum(rx_cpu_types) String(rx600) Value(RX600)
 
 EnumValue
 Enum(rx_cpu_types) String(rx100) Value(RX100)
+
+EnumValue
+Enum(rx_cpu_types) String(rx64m) Value(RX64M)
+
+EnumValue
+Enum(rx_cpu_types) String(rx66t) Value(RX66T)
+
+EnumValue
+Enum(rx_cpu_types) String(rx71m) Value(RX71M)
+
+EnumValue
+Enum(rx_cpu_types) String(rx72t) Value(RX72T)
+
+EnumValue
+Enum(rx_cpu_types) String(rx230) Value(RX230)
+
+EnumValue
+Enum(rx_cpu_types) String(rx13t) Value(RX13T)
+
+EnumValue
+Enum(rx_cpu_types) String(rx140) Value(RX140)
+;---------------------------------------------------
+
+mnosave-tfu
+Target RejectNegative Mask(NO_SAVE_TFU) Undocumented
+Code for saving and restoring the output of the trigonometric function unit (v2) is generated for all interrupt functions.
+
+
+;---------------------------------------------------
+
+mtfu-version=
+Target RejectNegative Joined Var(rx_tfu_version) ToLower Enum(rx_tfu_versions) Init(RX_TFUVUNINIT)
+Specify RX TFU version.
+
+Enum
+Name(rx_tfu_versions) Type(enum rx_tfu_versions)
+
+EnumValue
+Enum(rx_tfu_versions) String(v1) Value(RX_TFUV1)
+
+EnumValue
+Enum(rx_tfu_versions) String(v2) Value(RX_TFUV2)
+
+;---------------------------------------------------
+
+misa=
+Target RejectNegative Joined Var(rx_isa_version) ToLower Enum(rx_isa_versions) Init(RX_ISAUNINIT)
+Specify RX ISA version.
+
+Enum
+Name(rx_isa_versions) Type(enum rx_isa_versions)
+
+EnumValue
+Enum(rx_isa_versions) String(v1) Value(RX_ISAV1)
+
+EnumValue
+Enum(rx_isa_versions) String(v2) Value(RX_ISAV2)
+
+EnumValue
+Enum(rx_isa_versions) String(v3) Value(RX_ISAV3)
 
 ;---------------------------------------------------
 
@@ -83,7 +162,7 @@ Maximum size of global and static variables which can be placed into the small d
 ;---------------------------------------------------
 
 mrelax
-Target
+Target Mask(RELAX)
 Enable linker relaxation.
 
 ;---------------------------------------------------
@@ -91,18 +170,6 @@ Enable linker relaxation.
 mmax-constant-size=
 Target RejectNegative Joined UInteger Var(rx_max_constant_size) Init(0)
 Maximum size in bytes of constant values allowed as operands.
-
-;---------------------------------------------------
-
-mint-register=
-Target RejectNegative Joined UInteger Var(rx_deferred_options) Defer
-Specifies the number of registers to reserve for interrupt handlers.
-
-;---------------------------------------------------
-
-msave-acc-in-interrupts
-Target Mask(SAVE_ACC_REGISTER)
-Specifies whether interrupt functions should save and restore the accumulator register.
 
 ;---------------------------------------------------
 
@@ -117,10 +184,6 @@ Target Var(rx_warn_multiple_fast_interrupts) Init(1) Warning
 Warn when multiple, different, fast interrupt handlers are in the compilation unit.
 
 ;---------------------------------------------------
-
-mgcc-abi
-Target RejectNegative Mask(GCC_ABI)
-Enable the use of the old, broken, ABI where all stacked function arguments are aligned to 32-bits.
 
 mrx-abi
 Target RejectNegative InverseMask(GCC_ABI)
@@ -140,6 +203,29 @@ Enables or disables the use of the SMOVF, SMOVB, SMOVU, SUNTIL, SWHILE and RMPA 
 
 ;---------------------------------------------------
 
+mno-balign
+Target RejectNegative Mask(NOBALIGN)
+Do not use .balign
+
+;---------------------------------------------------
+
+mrxv2-fsqrt
+Target RejectNegative Mask(RX_SQRT)
+Enable to use of FSQRT hardware instruction for RXv2 instruction set
+
+;---------------------------------------------------
+
+morder
+Target Undocumented Joined Var(flag_morder) MissingArgError(Please use morder0, morder1 or morder2. The default is morder0)
+
+;---------------------------------------------------
+
 mjsr
 Target Mask(JSR)
 Always use JSR, never BSR, for calls.
+
+;---------------------------------------------------
+
+mrxpeephole
+Target Var(flag_rxpeephole) Init(0)
+Coremark improvement.

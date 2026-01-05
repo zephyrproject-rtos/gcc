@@ -12,8 +12,23 @@ UrlSuffix(gcc/RX-Options.html#index-nofpu)
 fpu
 UrlSuffix(gcc/RX-Options.html#index-fpu)
 
+mdfpu
+UrlSuffix(gcc/RX-Options.html#index-mdfpu)
+
+mtfu=
+UrlSuffix(gcc/RX-Options.html#index-mtfu)
+
 mcpu=
 UrlSuffix(gcc/RX-Options.html#index-mcpu-11)
+
+mnosave-tfu
+UrlSuffix(gcc/RX-Options.html#index-mnosave-tfu)
+
+mtfu-version=
+UrlSuffix(gcc/RX-Options.html#index-mtfu-version)
+
+misa=
+UrlSuffix(gcc/RX-Options.html#index-misa-1)
 
 mbig-endian-data
 UrlSuffix(gcc/RX-Options.html#index-mbig-endian-data)
@@ -30,24 +45,26 @@ UrlSuffix(gcc/RX-Options.html#index-mrelax-7)
 mmax-constant-size=
 UrlSuffix(gcc/RX-Options.html#index-mmax-constant-size)
 
-mint-register=
-UrlSuffix(gcc/RX-Options.html#index-mint-register)
-
-msave-acc-in-interrupts
-UrlSuffix(gcc/RX-Options.html#index-msave-acc-in-interrupts)
-
 mpid
 UrlSuffix(gcc/RX-Options.html#index-mpid)
 
 mwarn-multiple-fast-interrupts
 UrlSuffix(gcc/RX-Options.html#index-mwarn-multiple-fast-interrupts)
 
-; skipping UrlSuffix for 'mgcc-abi' due to finding no URLs
-
-; skipping UrlSuffix for 'mlra' due to finding no URLs
+mlra
+UrlSuffix(gcc/RX-Options.html#index-mlra-3)
 
 mallow-string-insns
 UrlSuffix(gcc/RX-Options.html#index-mallow-string-insns)
+
+mno-balign
+UrlSuffix(gcc/RX-Options.html#index-mno-balign)
+
+mrxv2-fsqrt
+UrlSuffix(gcc/RX-Options.html#index-mrxv2-fsqrt)
+
+morder
+UrlSuffix(gcc/RX-Options.html#index-morder)
 
 mjsr
 UrlSuffix(gcc/RX-Options.html#index-mjsr)

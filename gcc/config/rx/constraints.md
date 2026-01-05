@@ -32,6 +32,13 @@
   )
 )
 
+(define_constraint "Ibset"
+  "@internal An unsigned 8-bit immediate value with a single bit set"
+  (and (match_code "const_int")
+       (match_test "exact_log2 (ival) != -1")
+  )
+)
+
 (define_constraint "Sint08"
   "@internal A signed 8-bit immediate value"
   (and (match_code "const_int")
@@ -63,6 +70,20 @@
   )
 )
 
+(define_constraint "Uint05"
+  "@internal An unsigned 5-bit immediate value"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 31)")
+  )
+)
+
+(define_constraint "Uintz5"
+  "@internal An unsigned ,non-zero, 5-bit immediate value"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 1, 31)")
+  )
+)
+
 (define_constraint "NEGint4"
   "@internal An signed 4-bit negative immediate value"
   (and (match_code "const_int")
@@ -87,6 +108,14 @@
   )
 )
 
+(define_register_constraint "DFPUreg" "DOUBLE_REGS"
+  "The DFPU registers")
+
+(define_constraint "DoubleC"
+  "Const double."
+  (match_code "const_double")
+)
+
 (define_constraint "Rpid"
   "A MEM to a PID variable"
   (and (match_code "mem")
@@ -106,6 +135,56 @@
        )
   )
 )
+
+(define_memory_constraint "Rreg"
+  "A MEM which only uses REG addressing."
+  (and (match_code "mem")
+       (match_code "reg" "0")
+  )
+)
+
+(define_memory_constraint "Rd05"
+  "A MEM which only uses REG+INT addressing with 5-bit displacement."
+ (and (match_code "mem")
+       (and (match_code "plus" "0")
+           (and (match_code "reg,subreg" "00")
+                (and (match_code "const_int" "01")
+                     (match_test "IN_RANGE (INTVAL (XEXP (XEXP (op, 0), 1)),
+                                            0, 31 * GET_MODE_SIZE (GET_MODE (op)))")
+                )
+           )
+       )
+  )
+)
+
+(define_memory_constraint "Rd08"
+  "A MEM which only uses REG+INT addressing with 8-bit displacement."
+  (and (match_code "mem")
+       (and (match_code "plus" "0")
+           (and (match_code "reg,subreg" "00")
+                (and (match_code "const_int" "01")
+                     (match_test "IN_RANGE (INTVAL (XEXP (XEXP (op, 0), 1)),
+                                            0, 255 * GET_MODE_SIZE (GET_MODE (op)))")
+                )
+           )
+       )
+  )
+)
+
+(define_constraint "RXV2"
+"Reg constraint for RXV2 instructions"
+(and (match_code "reg")
+	(match_test "TARGET_RXV2")
+	)
+)
+
+(define_constraint "RXV3"
+"Reg constraint for RXV3 instructions"
+(and (match_code "reg")
+  (match_test "TARGET_RXV3")
+  )
+)
+
 
 (define_constraint "CALL_OP_SYMBOL_REF"
 "constraint for call instructions using symbol ref"

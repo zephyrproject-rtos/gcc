@@ -18,20 +18,131 @@
 # License along with GCC; see the file COPYING3.  If not see
 # <http://www.gnu.org/licenses/>.
 
+rx-pragma.o: $(srcdir)/config/rx/rx-pragma.c $(RTL_H) $(TREE_H) $(CONFIG_H) $(TM_H)
+	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) $<
+
 # Enable multilibs:
 
-MULTILIB_OPTIONS    = m64bit-doubles  mnofpu        mbig-endian-data  mpid
-MULTILIB_DIRNAMES   =  64-bit-double  no-fpu-libs   big-endian-data   pid
+MULTILIB_OPTIONS    = m64bit-doubles  nofpu        mbig-endian-data  mjsr mdfpu
+MULTILIB_DIRNAMES   =  64-bit-double  no-fpu-libs   big-endian-data  jsr dfpu
 
 # If necessary uncomment the next two lines to generate multilibs
 # using the old, broken, ABI.
 # MULTILIB_OPTIONS    += mgcc-abi
 # MULTILIB_DIRNAMES   +=  gcc-abi
 
+
 MULTILIB_OPTIONS   += mno-allow-string-insns
 MULTILIB_DIRNAMES  += no-strings
+
+
+MULTILIB_OPTIONS   += mcpu=rx64m
+MULTILIB_DIRNAMES  += rxv2
 
 MULTILIB_MATCHES    = nofpu=mnofpu  nofpu=mcpu?rx200  nofpu=mcpu?rx100
 
 MULTILIB_EXCEPTIONS =
 MULTILIB_EXTRA_OPTS = 
+
+MULTILIB_OPTIONS   += misa=v3
+MULTILIB_DIRNAMES  += rxv3
+MULTILIB_EXCEPTIONS  += *mcpu=*/*misa=v3*
+
+MULTILIB_REQUIRED =
+MULTILIB_REQUIRED += m64bit-doubles
+MULTILIB_REQUIRED += nofpu
+MULTILIB_REQUIRED += mbig-endian-data
+MULTILIB_REQUIRED += mjsr
+MULTILIB_REQUIRED += mno-allow-string-insns
+MULTILIB_REQUIRED += mcpu=rx64m
+MULTILIB_REQUIRED += misa=v3
+MULTILIB_REQUIRED += mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += mjsr/mno-allow-string-insns
+MULTILIB_REQUIRED += mjsr/mcpu=rx64m
+MULTILIB_REQUIRED += mjsr/misa=v3
+MULTILIB_REQUIRED += mjsr/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += mjsr/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += mbig-endian-data/mjsr
+MULTILIB_REQUIRED += mbig-endian-data/mno-allow-string-insns
+MULTILIB_REQUIRED += mbig-endian-data/mcpu=rx64m
+MULTILIB_REQUIRED += mbig-endian-data/misa=v3
+MULTILIB_REQUIRED += mbig-endian-data/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += mbig-endian-data/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += mbig-endian-data/mjsr/mno-allow-string-insns
+MULTILIB_REQUIRED += mbig-endian-data/mjsr/mcpu=rx64m
+MULTILIB_REQUIRED += mbig-endian-data/mjsr/misa=v3
+MULTILIB_REQUIRED += mbig-endian-data/mjsr/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += mbig-endian-data/mjsr/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += nofpu/mbig-endian-data
+MULTILIB_REQUIRED += nofpu/mjsr
+MULTILIB_REQUIRED += nofpu/mno-allow-string-insns
+MULTILIB_REQUIRED += nofpu/mcpu=rx64m
+MULTILIB_REQUIRED += nofpu/misa=v3
+MULTILIB_REQUIRED += nofpu/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += nofpu/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += nofpu/mjsr/mno-allow-string-insns
+MULTILIB_REQUIRED += nofpu/mjsr/mcpu=rx64m
+MULTILIB_REQUIRED += nofpu/mjsr/misa=v3
+MULTILIB_REQUIRED += nofpu/mjsr/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += nofpu/mjsr/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mjsr
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mno-allow-string-insns
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mcpu=rx64m
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/misa=v3
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mjsr/mno-allow-string-insns
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mjsr/mcpu=rx64m
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mjsr/misa=v3
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mjsr/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += nofpu/mbig-endian-data/mjsr/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/nofpu
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data
+MULTILIB_REQUIRED += m64bit-doubles/mjsr
+MULTILIB_REQUIRED += m64bit-doubles/mno-allow-string-insns
+MULTILIB_REQUIRED += m64bit-doubles/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/mjsr/mno-allow-string-insns
+MULTILIB_REQUIRED += m64bit-doubles/mjsr/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/mjsr/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/mjsr/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/mjsr/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mjsr
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mno-allow-string-insns
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mjsr/mno-allow-string-insns
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mjsr/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mjsr/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mjsr/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/mbig-endian-data/mjsr/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mjsr
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mno-allow-string-insns
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mjsr/mno-allow-string-insns
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mjsr/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mjsr/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mjsr/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mjsr/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mjsr
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mno-allow-string-insns
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mno-allow-string-insns/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mjsr/mno-allow-string-insns
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mjsr/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mjsr/misa=v3
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mjsr/mno-allow-string-insns/mcpu=rx64m
+MULTILIB_REQUIRED += m64bit-doubles/nofpu/mbig-endian-data/mjsr/mno-allow-string-insns/misa=v3
+
+MULTILIB_REQUIRED += m64bit-doubles/mdfpu/misa=v3

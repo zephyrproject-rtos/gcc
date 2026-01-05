@@ -49,6 +49,16 @@
        (match_test "IN_RANGE (INTVAL (op), 0, 31)"))
 )
 
+(define_predicate "rx_bitclr_operand"
+  (and (match_code "const_int")
+       (match_test "exact_log2 (~INTVAL (op)) != -1"))
+)
+
+(define_predicate "rx_bitset_operand"
+  (and (match_code "const_int")
+       (match_test "exact_log2 (INTVAL (op)) != -1"))
+)
+
 (define_predicate "rx_restricted_mem_operand"
   (and (match_code "mem")
        (match_test "rx_is_restricted_memory_address (XEXP (op, 0), mode)"))
@@ -62,6 +72,13 @@
   (ior (match_operand 0 "register_operand")
        (match_operand 0 "immediate_operand")
        (match_operand 0 "rx_restricted_mem_operand"))
+)
+
+(define_predicate "rx_speed_source_operand"
+  (ior (match_operand 0 "register_operand")
+       (match_operand 0 "immediate_operand")
+       (and (match_test "optimize_size")
+            (match_operand 0 "rx_restricted_mem_operand")))
 )
 
 ;; Check that the operand is suitable as the source operand
@@ -82,6 +99,18 @@
 (define_predicate "rx_minmaxex_operand"
   (ior (match_operand 0 "immediate_operand")
        (match_operand 0 "rx_restricted_mem_operand"))
+)
+
+(define_predicate "rx_speed_minmaxex_operand"
+  (ior (match_operand 0 "immediate_operand")
+       (and (match_test "optimize_size")
+            (match_operand 0 "rx_restricted_mem_operand")))
+)
+
+(define_predicate "rx_speed_compare_operand"
+  (ior (match_operand 0 "register_operand")
+       (and (match_test "optimize_size")
+            (match_operand 0 "rx_restricted_mem_operand")))
 )
 
 ;; Return true if OP is a store multiple operation.  This looks like:
@@ -114,33 +143,15 @@
       || ! CONST_INT_P (XEXP (SET_SRC (element), 1)))
     return false;
 	 
-  /* Check that the next element is the first push.  */
-  element = XVECEXP (op, 0, 1);
-  if (   ! SET_P (element)
-      || ! REG_P (SET_SRC (element))
-      || GET_MODE (SET_SRC (element)) != SImode
-      || ! MEM_P (SET_DEST (element))
-      || GET_MODE (SET_DEST (element)) != SImode
-      || GET_CODE (XEXP (SET_DEST (element), 0)) != MINUS
-      || ! REG_P (XEXP (XEXP (SET_DEST (element), 0), 0))
-      ||   REGNO (XEXP (XEXP (SET_DEST (element), 0), 0)) != SP_REG
-      || ! CONST_INT_P (XEXP (XEXP (SET_DEST (element), 0), 1))
-      || INTVAL (XEXP (XEXP (SET_DEST (element), 0), 1))
-        != GET_MODE_SIZE (SImode))
-    return false;
-
-  src_regno = REGNO (SET_SRC (element));
-
   /* Check that the remaining elements use SP-<disp>
      addressing and decreasing register numbers.  */
-  for (i = 2; i < count; i++)
+    for (i = 1; i < count - 1; i++)	
     {
       element = XVECEXP (op, 0, i);
 
       if (   ! SET_P (element)
 	  || ! REG_P (SET_SRC (element))
 	  || GET_MODE (SET_SRC (element)) != SImode
-	  || REGNO (SET_SRC (element)) != src_regno - (i - 1)
 	  || ! MEM_P (SET_DEST (element))
 	  || GET_MODE (SET_DEST (element)) != SImode
 	  || GET_CODE (XEXP (SET_DEST (element), 0)) != MINUS
