@@ -8724,6 +8724,19 @@ arm_legitimate_address_outer_p (machine_mode mode, rtx x, RTX_CODE outer,
   return 0;
 }
 
+/* Return nonzero if literal pool is allowed for the constant X.
+   With -mslow-flash-data, literal pools are allowed specifically for TLS
+   access.  With -mpure-code, literal pools are never allowed.  */
+static int
+arm_literal_pool_allowed_p (rtx x)
+{
+  if (!arm_disable_literal_pool)
+    return 1;
+  if (target_slow_flash_data && tls_mentioned_p (x))
+    return 1;
+  return 0;
+}
+
 /* Return true if we can avoid creating a constant pool entry for x.  */
 static bool
 can_avoid_literal_pool_for_label_p (rtx x)
@@ -8743,8 +8756,9 @@ can_avoid_literal_pool_for_label_p (rtx x)
      (set (reg r0) (mem (reg r0))).
      No extra register is required, and (mem (reg r0)) won't cause the use
      of literal pools.  */
-  if (arm_disable_literal_pool && SYMBOL_REF_P (x)
-      && CONSTANT_POOL_ADDRESS_P (x))
+  if (SYMBOL_REF_P (x)
+      && CONSTANT_POOL_ADDRESS_P (x)
+      && !arm_literal_pool_allowed_p (get_pool_constant (x)))
     return 1;
   return 0;
 }
@@ -9130,7 +9144,7 @@ thumb1_legitimate_address_p (machine_mode mode, rtx x, int strict_p)
   else if (GET_MODE_SIZE (mode) >= 4 && CONSTANT_P (x)
 	   && SYMBOL_REF_P (x)
 	   && CONSTANT_POOL_ADDRESS_P (x) && !flag_pic
-	   && !arm_disable_literal_pool)
+	   && arm_literal_pool_allowed_p (get_pool_constant (x)))
     return 1;
 
   /* This is PC relative data after arm_reorg runs.  */
@@ -9196,7 +9210,7 @@ thumb1_legitimate_address_p (machine_mode mode, rtx x, int strict_p)
 	   && GET_MODE_SIZE (mode) == 4
 	   && SYMBOL_REF_P (x)
 	   && CONSTANT_POOL_ADDRESS_P (x)
-	   && !arm_disable_literal_pool
+	   && arm_literal_pool_allowed_p (get_pool_constant (x))
 	   && ! (flag_pic
 		 && symbol_mentioned_p (get_pool_constant (x))
 		 && ! pcrel_constant_p (get_pool_constant (x))))
@@ -9735,10 +9749,11 @@ arm_tls_referenced_p (rtx x)
 	{
 	  /* ARM currently does not provide relocations to encode TLS variables
 	     into AArch32 instructions, only data, so there is no way to
-	     currently implement these if a literal pool is disabled.  */
-	  if (arm_disable_literal_pool)
+	     currently implement these if a literal pool is disabled.
+	     With -mslow-flash-data, we allow TLS by using the literal pool.  */
+	  if (target_pure_code)
 	    sorry ("accessing thread-local storage is not currently supported "
-		   "with %<-mpure-code%> or %<-mslow-flash-data%>");
+		   "with %<-mpure-code%>");
 
 	  return true;
 	}
@@ -18309,7 +18324,7 @@ static void
 push_minipool_fix (rtx_insn *insn, HOST_WIDE_INT address, rtx *loc,
 		   machine_mode mode, rtx value)
 {
-  gcc_assert (!arm_disable_literal_pool);
+  gcc_assert (arm_literal_pool_allowed_p (value));
   Mfix * fix = (Mfix *) obstack_alloc (&minipool_obstack, sizeof (* fix));
 
   fix->insn = insn;
@@ -19630,7 +19645,7 @@ arm_reorg (void)
 
   /* Make sure we do not attempt to create a literal pool even though it should
      no longer be necessary to create any.  */
-  if (arm_disable_literal_pool)
+  if (target_pure_code)
     return ;
 
   minipool_fix_head = minipool_fix_tail = NULL;
