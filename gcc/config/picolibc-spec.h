@@ -1,5 +1,5 @@
 /* Configuration common to all targets running Picolibc.
-   Copyright (C) 2023 Free Software Foundation, Inc.
+   Copyright (C) 2026 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -23,15 +23,22 @@
    <http://www.gnu.org/licenses/>.  */
 
 #define PICOLIBC_LD "picolibc.ld"
+#define PICOLIBCPP_LD "picolibcpp.ld"
+
+#define EXCEPT_FILE_ELSE(_except, _noexcept) "%:if-driverlang(c++ " _except " " _noexcept ")"
+#define EXCEPT_FILE(_except) "%:if-driverlang(c++ " _except ")"
+
+#define PICOLIBC_SCRIPT   EXCEPT_FILE_ELSE(PICOLIBCPP_LD, PICOLIBC_LD)
+#define PICOLIBC_CRTEND   EXCEPT_FILE("crtend%O%s")
+#define PICOLIBC_CRTBEGIN EXCEPT_FILE("crtbegin%O%s")
 
 /* Default to local-exec TLS model.  */
 #undef OS_CC1_SPEC
 #define OS_CC1_SPEC " %{!ftls-model=*:-ftls-model=local-exec}"
 
 /* Pass along preprocessor definitions when --printf or --scanf are specified */
-#undef LIBC_CPP_SPEC
 #define LIBC_CPP_SPEC				\
-  "%{-printf=*: -D_PICOLIBC_PRINTF='%*'}"	\
+  " %{-printf=*: -D_PICOLIBC_PRINTF='%*'}"	\
   " %{-scanf=*: -D_PICOLIBC_SCANF='%*'}"
 
 /*
@@ -39,9 +46,8 @@
  * Define vfprintf if --printf is set
  * Define vfscanf if --scanf is set
  */
-#undef LIBC_LINK_SPEC
 #define LIBC_LINK_SPEC							\
-  "%{!shared:%{!r:%{!T*: %:if-exists-then-else(%:find-file(" PICOLIBC_LD ") -T" PICOLIBC_LD ")}}}" \
+  " %{!shared:%{!r:%{!T*: %:if-exists-then-else(%:find-file(" PICOLIBC_SCRIPT ") -T" PICOLIBC_SCRIPT ")}}}" \
   " %{-printf=*:--defsym=" USER_LABEL_PREFIX "vfprintf=" USER_LABEL_PREFIX "__%*_vfprintf}" \
   " %{-scanf=*:--defsym=" USER_LABEL_PREFIX "vfscanf=" USER_LABEL_PREFIX "__%*_vfscanf}"
 
@@ -49,11 +55,14 @@
  * Place the C library, libgcc and any oslib in a link group to resolve
  * interdependencies
  */
-#undef  LIB_SPEC
+#undef LIB_SPEC
 #define LIB_SPEC "--start-group -lc %{-oslib=*:-l%*} %(libgcc) --end-group"
+
+#undef ENDFILE_SPEC
+#define ENDFILE_SPEC PICOLIBC_CRTEND
 
 /* Select alternate crt0 version if --crt0 is specified */
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC "%{-crt0=*:crt0-%*%O%s; :crt0%O%s}"
+#define STARTFILE_SPEC "%{-crt0=*:crt0-%*%O%s; :crt0%O%s} " PICOLIBC_CRTBEGIN
 
 #define EH_TABLES_CAN_BE_READ_ONLY 1

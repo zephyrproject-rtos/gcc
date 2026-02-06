@@ -1222,6 +1222,9 @@ AC_ARG_WITH(multilib-generator,
 :,
 with_multilib_generator=default)
 
+AC_ARG_WITH(picolibc,
+[AS_HELP_STRING([--with-picolibc], [Support for picolibc, including command line options and spec rules])])
+
 # -------------------------
 # Checks for other programs
 # -------------------------
@@ -2567,10 +2570,6 @@ if { { test x$host != x$target && test "x$with_sysroot" = x ; } ||
        inhibit_libc=true
 fi
 AC_SUBST(inhibit_libc)
-
-AC_ARG_WITH(default-libc,
-	[AS_HELP_STRING([--with-default-libc],
-			[Use specified default C library])])
 
 # When building gcc with a cross-compiler, we need to adjust things so
 # that the generator programs are still built with the native compiler.
