@@ -47,7 +47,7 @@
  * Define vfscanf if --scanf is set
  */
 #define LIBC_LINK_SPEC							\
-  " %{!shared:%{!r:%{!T*: %:if-exists-then-else(%:find-file(" PICOLIBC_SCRIPT ") -T" PICOLIBC_SCRIPT ")}}}" \
+  " %{!shared:%{!r:%{!T*: %:if-exists-then-else(%:find-file(" PICOLIBC_SCRIPT ") -T%:find-file(" PICOLIBC_SCRIPT "))}}}" \
   " %{-printf=*:--defsym=" USER_LABEL_PREFIX "vfprintf=" USER_LABEL_PREFIX "__%*_vfprintf}" \
   " %{-scanf=*:--defsym=" USER_LABEL_PREFIX "vfscanf=" USER_LABEL_PREFIX "__%*_vfscanf}"
 
