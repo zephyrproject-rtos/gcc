@@ -96,7 +96,9 @@ march=rv64imafdcv_zicsr_zifencei/mabi=lp64d/mcmodel=medany \
 march=rv64imafdcv_zicsr_zifencei/mabi=lp64d/mcmodel=large \
 march=rv64imafd_zicsr_zifencei/mabi=lp64d/mcmodel=medany \
 march=rv64imfc_zicsr_zifencei/mabi=lp64f/mcmodel=medany \
-march=rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64f/mcmodel=medany
+march=rv64imfc_zicsr_zifencei/mabi=lp64f/mcmodel=large \
+march=rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64f/mcmodel=medany \
+march=rv64imfc_zicsr_zifencei_zba_zbb_zbc_zbs/mabi=lp64f/mcmodel=large
 
 # Multilib alternate mapping
 MULTILIB_REUSE = \
