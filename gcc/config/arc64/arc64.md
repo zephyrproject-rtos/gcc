@@ -2866,14 +2866,15 @@ xorl"
 ;; Floating-point intrinsics
 ;; -------------------------------------------------------------------
 
-(define_insn "round<mode>2"
-  [(set (match_operand:GPF 0 "register_operand" "=w")
-	(unspec:GPF [(match_operand:GPF 1 "register_operand" "w")]
-		    ARC64_UNSPEC_ROUND))]
-  "ARC64_HAS_FP_BASE"
-  "f<sfxtab>rnd\\t%0,%1"
-  [(set_attr "length" "4")
-   (set_attr "type" "frnd")])
+;; Cannot use the F*RND instruction as that doesn't round-away
+;;(define_insn "round<mode>2"
+;;  [(set (match_operand:GPF 0 "register_operand" "=w")
+;;	(unspec:GPF [(match_operand:GPF 1 "register_operand" "w")]
+;;		    ARC64_UNSPEC_ROUND))]
+;;  "ARC64_HAS_FP_BASE"
+;;  "f<sfxtab>rnd\\t%0,%1"
+;;  [(set_attr "length" "4")
+;;   (set_attr "type" "frnd")])
 
 (define_insn "btrunc<mode>2"
   [(set (match_operand:GPF 0 "register_operand" "=w")
