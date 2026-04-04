@@ -37218,6 +37218,23 @@ intended to be passed to the LTO linker plugin.
 The @code{print-asm-header} function takes no arguments and simply
 prints a banner like:
 
+@item @code{if-driverlang}
+The @code{if-driverlang} spec function takes at least two arguments
+and an optional third one. The first argument is a language name as is
+used with @option{-x}. That is compared with the target language of
+the Compilation Driver, for example the target language for @file{gcc}
+is @samp{c} and the target language for @file{g++} is @samp{c++}. If
+they match, the function returns the second argument. If they do not
+match, the function returns the third argument if there is one, or
+NULL otherwise. This can be used to select general options or linker
+parameters based upon which Compilation Driver was invoked. Here is a
+small example of its usage:
+
+@smallexample
+*startfile:
+crt0%O%s %:if-driverlang(c++ crtbegin%O%s)
+@end smallexample
+
 @smallexample
 Assembler options
 =================

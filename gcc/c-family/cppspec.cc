@@ -198,3 +198,6 @@ int lang_specific_pre_link (void)
 
 /* Number of extra output files that lang_specific_pre_link may generate.  */
 int lang_specific_extra_outfiles = 0;  /* Not used for cpp.  */
+
+/* Language target for this driver */
+const char *lang_specific_language = NULL;

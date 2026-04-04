@@ -88,6 +88,9 @@ extern int n_infiles;
 /* Number of extra output files that lang_specific_pre_link may generate.  */
 extern int lang_specific_extra_outfiles;
 
+/* The target language of the current driver, NULL if none */
+extern const char *lang_specific_language;
+
 /* A vector of corresponding output files is made up later.  */
 
 extern const char **outfiles;

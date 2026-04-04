@@ -459,6 +459,7 @@ static const char *debug_level_greater_than_spec_func (int, const char **);
 static const char *dwarf_version_greater_than_spec_func (int, const char **);
 static const char *find_fortran_preinclude_file (int, const char **);
 static const char *join_spec_func (int, const char **);
+static const char *if_driverlang_spec_function (int, const char **);
 static char *convert_white_space (char *);
 static char *quote_spec (char *);
 static char *quote_spec_arg (char *);
@@ -1805,6 +1806,7 @@ static const struct spec_function static_spec_functions[] =
   { "dwarf-version-gt",		dwarf_version_greater_than_spec_func },
   { "fortran-preinclude-file",	find_fortran_preinclude_file},
   { "join",			join_spec_func},
+  { "if-driverlang",            if_driverlang_spec_function },
 #ifdef EXTRA_SPEC_FUNCTIONS
   EXTRA_SPEC_FUNCTIONS
 #endif
@@ -11112,6 +11114,32 @@ join_spec_func (int argc, const char **argv)
     obstack_grow (&obstack, argv[i], strlen (argv[i]));
   obstack_1grow (&obstack, '\0');
   return XOBFINISH (&obstack, const char *);
+}
+
+/* if-driverlang built-in spec function.
+
+   Checks to see if the language-specific driver has specified a
+   language name that matches the first arg. Returns the second arg if
+   so, otherwise returns the third arg if it is present.  */
+
+static const char *
+if_driverlang_spec_function (int argc, const char **argv)
+{
+  const char *language;
+
+  /* Must have two or three arguments.  */
+  if (argc != 2 && argc != 3)
+    return NULL;
+
+  language = lang_specific_language;
+
+  if (language && !strcmp (argv[0], language))
+    return argv[1];
+
+  if (argc == 3)
+    return argv[2];
+
+  return NULL;
 }
 
 /* If any character in ORIG fits QUOTE_P (_, P), reallocate the string

@@ -525,3 +525,5 @@ lang_specific_pre_link (void)
 
 int lang_specific_extra_outfiles = 0;  /* Not used for D.  */
 
+/* Language target for this driver */
+const char *lang_specific_language = "d";
