@@ -488,13 +488,30 @@ static const struct riscv_tune_param thead_c906_tune_info = {
   {COSTS_N_INSNS (20), COSTS_N_INSNS (20)}, /* fp_div */
   {COSTS_N_INSNS (4), COSTS_N_INSNS (4)}, /* int_mul */
   {COSTS_N_INSNS (18), COSTS_N_INSNS (34)}, /* int_div */
-  1,            /* issue_rate */
-  3,            /* branch_cost */
-  5,            /* memory_cost */
-  8,		/* fmv_cost */
-  false,            /* slow_unaligned_access */
-  false,	/* use_divmod_expansion */
-  RISCV_FUSE_NOTHING,                           /* fusible_ops */
+  1,						/* issue_rate */
+  3,						/* branch_cost */
+  5,						/* memory_cost */
+  8,						/* fmv_cost */
+  false,					/* slow_unaligned_access */
+  false,					/* use_divmod_expansion */
+  RISCV_FUSE_NOTHING,  /* fusible_ops */
+  NULL,						/* vector cost */
+};
+
+/* Costs to use when optimizing for T-HEAD e907.  */
+static const struct riscv_tune_param thead_e907_tune_info = {
+  {COSTS_N_INSNS (4), COSTS_N_INSNS (5)}, /* fp_add */
+  {COSTS_N_INSNS (4), COSTS_N_INSNS (5)}, /* fp_mul */
+  {COSTS_N_INSNS (20), COSTS_N_INSNS (20)}, /* fp_div */
+  {COSTS_N_INSNS (4), COSTS_N_INSNS (4)}, /* int_mul */
+  {COSTS_N_INSNS (6), COSTS_N_INSNS (6)}, /* int_div */
+  1,						/* issue_rate */
+  3,						/* branch_cost */
+  5,						/* memory_cost */
+  8,						/* fmv_cost */
+  true,						/* slow_unaligned_access */
+  true,						/* use_divmod_expansion */
+  RISCV_FUSE_NOTHING,				/* fusible_ops */
   NULL,						/* vector cost */
 };
 
