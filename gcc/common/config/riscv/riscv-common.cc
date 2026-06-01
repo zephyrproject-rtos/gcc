@@ -184,6 +184,21 @@ static const riscv_implied_info_t riscv_implied_info[] =
      return subset_list->xlen () == 32 && subset_list->lookup ("f");
    }},
 
+  {"xtheade", "xtheadcmo"},
+  {"xtheade", "xtheadsync"},
+  {"xtheade", "xtheadba"},
+  {"xtheade", "xtheadbb"},
+  {"xtheade", "xtheadbs"},
+  {"xtheade", "xtheadcondmov"},
+  {"xtheade", "xtheadmemidx"},
+  {"xtheade", "xtheadfmv"},
+  {"xtheade", "xtheadmac"},
+  {"xtheade", "xtheadint"},
+
+  {"zpsfoperand", "zpn",
+   [] (const riscv_subset_list *subset_list) -> bool
+   { return subset_list->xlen () == 32; }},
+
   {"smaia", "ssaia"},
   {"smstateen", "ssstateen"},
   {"smepmp", "zicsr"},
@@ -349,6 +364,9 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"zcmp", ISA_SPEC_CLASS_NONE, 1, 0},
   {"zcmt", ISA_SPEC_CLASS_NONE, 1, 0},
 
+  {"zpn", ISA_SPEC_CLASS_NONE, 0, 9},
+  {"zpsfoperand", ISA_SPEC_CLASS_NONE, 0, 9},
+
   {"smaia",     ISA_SPEC_CLASS_NONE, 1, 0},
   {"smepmp",    ISA_SPEC_CLASS_NONE, 1, 0},
   {"smstateen", ISA_SPEC_CLASS_NONE, 1, 0},
@@ -368,6 +386,7 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"xcvsimd", ISA_SPEC_CLASS_NONE, 1, 0},
   {"xcvbi", ISA_SPEC_CLASS_NONE, 1, 0},
 
+  {"xtheade", ISA_SPEC_CLASS_NONE, 1, 0},
   {"xtheadba", ISA_SPEC_CLASS_NONE, 1, 0},
   {"xtheadbb", ISA_SPEC_CLASS_NONE, 1, 0},
   {"xtheadbs", ISA_SPEC_CLASS_NONE, 1, 0},
@@ -1633,6 +1652,9 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   {"zcmp",    &gcc_options::x_riscv_zc_subext, MASK_ZCMP},
   {"zcmt",    &gcc_options::x_riscv_zc_subext, MASK_ZCMT},
 
+  {"zpn",          &gcc_options::x_riscv_xthead_subext, MASK_ZPN},
+  {"zpsfoperand",  &gcc_options::x_riscv_xthead_subext, MASK_ZPSFOPERAND},
+
   {"svinval", &gcc_options::x_riscv_sv_subext, MASK_SVINVAL},
   {"svnapot", &gcc_options::x_riscv_sv_subext, MASK_SVNAPOT},
 
@@ -1644,6 +1666,7 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   {"xcvsimd",       &gcc_options::x_riscv_xcv_subext, MASK_XCVSIMD},
   {"xcvbi",         &gcc_options::x_riscv_xcv_subext, MASK_XCVBI},
 
+  {"xtheade",       &gcc_options::x_riscv_xthead_subext, MASK_XTHEADE},
   {"xtheadba",      &gcc_options::x_riscv_xthead_subext, MASK_XTHEADBA},
   {"xtheadbb",      &gcc_options::x_riscv_xthead_subext, MASK_XTHEADBB},
   {"xtheadbs",      &gcc_options::x_riscv_xthead_subext, MASK_XTHEADBS},
