@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-mv850e3v5 -O2 -mep -mno-prolog-function -g" } */
+/* { dg-options "-mv850e3v5 -mgcc-abi -O2 -mep -mno-prolog-function -g" } */
 
 volatile float fv;
 volatile int n;

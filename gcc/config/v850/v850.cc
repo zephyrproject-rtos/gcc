@@ -2081,7 +2081,16 @@ v850_handle_data_area_attribute (tree *node, tree name,
   if (is_attribute_p ("sda", name))
     data_area = DATA_AREA_SDA;
   else if (is_attribute_p ("tda", name))
-    data_area = DATA_AREA_TDA;
+    {
+      if (! TARGET_GCC_ABI)
+	{
+	  error ("the %qE attribute is not supported with the RH850 ABI; "
+		 "use %<-mgcc-abi%>", name);
+	  *no_add_attrs = true;
+	  return NULL_TREE;
+	}
+      data_area = DATA_AREA_TDA;
+    }
   else if (is_attribute_p ("zda", name))
     data_area = DATA_AREA_ZDA;
   else
@@ -3055,6 +3064,16 @@ v850_legitimate_constant_p (machine_mode mode ATTRIBUTE_UNUSED, rtx x)
 	       && !CONST_OK_FOR_K (INTVAL (XEXP (XEXP (x, 0), 1)))));
 }
 
+/* Return true if X is a ZDA symbol, possibly plus an offset.  */
+
+static bool
+v850_zda_symbol_p (rtx x)
+{
+  if (GET_CODE (x) == CONST && GET_CODE (XEXP (x, 0)) == PLUS)
+    x = XEXP (XEXP (x, 0), 0);
+  return GET_CODE (x) == SYMBOL_REF && SYMBOL_REF_ZDA_P (x);
+}
+
 /* Helper function for `v850_legitimate_address_p'.  */
 
 static bool
@@ -3103,7 +3122,8 @@ v850_legitimate_address_p (machine_mode mode, rtx x, bool strict_p,
       && GET_MODE_SIZE (mode) <= GET_MODE_SIZE (word_mode))
     return true;
   if (special_symbolref_operand (x, mode)
-      && (GET_MODE_SIZE (mode) <= GET_MODE_SIZE (word_mode)))
+      && (GET_MODE_SIZE (mode) <= GET_MODE_SIZE (word_mode))
+      && (TARGET_GCC_ABI || ! v850_zda_symbol_p (x)))
     return true;
   if (GET_CODE (x) == PLUS
       && v850_rtx_ok_for_base_p (XEXP (x, 0), strict_p)
@@ -3191,6 +3211,11 @@ v850_option_override (void)
   /* The RH850 ABI does not (currently) support the use of the CALLT instruction.  */
   if (! TARGET_GCC_ABI)
     target_flags |= MASK_DISABLE_CALLT;
+
+  if (! TARGET_GCC_ABI && TARGET_EP)
+    error ("%<-mep%> is not supported with the RH850 ABI; use %<-mgcc-abi%>");
+  if (! TARGET_GCC_ABI && small_memory_max[(int) SMALL_MEMORY_TDA] > 0)
+    error ("%<-mtda%> is not supported with the RH850 ABI; use %<-mgcc-abi%>");
 
   /* Save the initial options in case the user does function specific
      options.  */

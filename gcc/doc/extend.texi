@@ -8676,7 +8676,8 @@ which can hold up to 64 kilobytes.
 @cindex @code{tda} variable attribute, V850
 @item tda
 Use this attribute to explicitly place a variable in the tiny data area,
-which can hold up to 256 bytes in total.
+which can hold up to 256 bytes in total.  It is not supported with
+@option{-mrh850-abi}.
 
 @cindex @code{zda} variable attribute, V850
 @item zda

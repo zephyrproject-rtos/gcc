@@ -34078,6 +34078,11 @@ The @option{-m8byte-align} command-line option is supported.
 The @option{-mdisable-callt} command-line option is enabled by
 default.  The @option{-mno-disable-callt} command-line option is not
 supported.
+
+@item
+The @option{-mep} and @option{-mtda} command-line options and the
+@code{tda} variable attribute are not supported, because the ABI has no
+relocation for an offset from @code{ep}.
 @end itemize
 
 When this version of the ABI is enabled the C preprocessor symbol
