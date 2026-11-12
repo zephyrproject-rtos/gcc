@@ -64,6 +64,11 @@ extern void v850_atomic_fence (rtx, bool);
 
 #ifdef TREE_CODE
 extern int    v850_interrupt_function_p     (tree);
+extern bool v850_interrupt_fe_p (tree);
+extern int v850_interrupt_state (void);
+extern int v850_interrupt_state_size (int);
+extern const char *v850_interrupt_return_insn (void);
+extern const char *v850_output_interrupt_state (int, bool);
 extern void   v850_output_aligned_bss       (FILE *, tree, const char *, unsigned HOST_WIDE_INT, int);
 extern void   v850_output_common            (FILE *, tree, const char *, int, int);
 extern void   v850_output_local             (FILE *, tree, const char *, int, int);

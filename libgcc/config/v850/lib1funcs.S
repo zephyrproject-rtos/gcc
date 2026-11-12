@@ -1619,7 +1619,11 @@ __return_interrupt:
 	ld.w	12[sp],r10
 	ld.w    16[sp],r11
 	addi    20,sp,sp
+#ifdef __v850e3v5__
+	eiret
+#else
 	reti
+#endif
 	.size	__return_interrupt,.-__return_interrupt
 #endif /* L_save_interrupt */
 
@@ -1878,7 +1882,11 @@ __callt_return_r2_r31:	.short ctoff(.L_return_r2_r31)
         ld.w     4[sp], gp
         ld.w     0[sp], ep
         addi    28, sp, sp
+#ifdef __v850e3v5__
+	eiret
+#else
         reti
+#endif
 
 	/* Place the offsets of the start of these routines into the call table.  */
 	.call_table_data

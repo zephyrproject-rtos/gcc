@@ -6638,10 +6638,25 @@ The V850 back end supports these function attributes:
 @cindex @code{interrupt_handler} function attribute, V850
 @item interrupt
 @itemx interrupt_handler
+@itemx interrupt ("@var{level}")
+@itemx interrupt_handler ("@var{level}")
 Use these attributes to indicate
 that the specified function is an interrupt handler.  The compiler generates
 function entry and exit sequences suitable for use in an interrupt handler
 when either attribute is present.
+
+For @option{-mv850e3v5} and later, the optional argument @var{level}
+selects the exception level of the handler.  With no argument or
+@code{"EI"}, the handler returns with @code{eiret}; with @code{"FE"}, it
+returns with @code{feret}.  The argument is not accepted for earlier
+targets, which return with @code{reti}.
+
+An EI level handler saves and restores EIPC and EIPSW, so that it can
+enable interrupts with @code{ei} and be nested; interrupts are disabled
+again before EIPC and EIPSW are restored.  An FE level handler does not
+save FEPC and FEPSW@.  A handler saves FPSR and FPEPC when it uses the
+FPU or calls a function, and with @option{-mfxu} it saves FXSR when it
+calls a function.
 @end table
 
 @node Visium Function Attributes

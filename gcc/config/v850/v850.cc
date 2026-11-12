@@ -49,6 +49,7 @@
 #include "langhooks.h"
 #include "cfgrtl.h"
 #include "builtins.h"
+#include "rtl-iter.h"
 #include "fold-const.h"
 #include "gimple.h"
 #include "gimple-iterator.h"
@@ -1512,6 +1513,7 @@ compute_register_save_size (long * p_reg_saved)
       size += INTERRUPT_FIXED_SAVE_SIZE - 4 * INTERRUPT_FIXED_NUM;
       if (call_p)
 	size += INTERRUPT_ALL_SAVE_SIZE - 4 * 25;
+      size += v850_interrupt_state_size (v850_interrupt_state ());
     }
   else
     {
@@ -1686,6 +1688,60 @@ increment_stack (signed int amount, bool in_prologue)
   if (in_prologue)
     F (insn);
   return insn;
+}
+
+/* Describe interrupt prologue INSN: sp moved by DELTA, then the registers
+   in REGS saved at the offsets in OFFS from the new sp.  */
+
+static void
+v850_interrupt_frame_note (rtx_insn *insn, HOST_WIDE_INT delta, int n,
+			   const int *regs, const int *offs)
+{
+  RTX_FRAME_RELATED_P (insn) = 1;
+  for (int i = 0; i < n; i++)
+    add_reg_note (insn, REG_CFA_OFFSET,
+		  gen_rtx_SET (gen_frame_mem (SImode,
+					      plus_constant (Pmode,
+							     stack_pointer_rtx,
+							     offs[i])),
+			       gen_rtx_REG (SImode, regs[i])));
+  add_reg_note (insn, REG_CFA_ADJUST_CFA,
+		gen_rtx_SET (stack_pointer_rtx,
+			     plus_constant (Pmode, stack_pointer_rtx, delta)));
+}
+
+/* Registers saved by save_all_interrupt and their offsets; gp and r11 are
+   left to the copies saved by save_interrupt.  */
+
+static void
+v850_interrupt_save_all_layout (int *regs, int *offs, int *n)
+{
+  int i, k = 0;
+
+  if (! TARGET_DISABLE_CALLT && TARGET_V850E_UP)
+    {
+      static const int lo[] = { 2, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17,
+				18, 19 };
+      static const int lo_off[] = { 100, 96, 92, 88, 84, 80, 72, 68, 64, 60,
+				    56, 52, 48, 44 };
+      for (i = 0; i < 14; i++, k++)
+	regs[k] = lo[i], offs[k] = lo_off[i];
+      for (i = 20; i <= 29; i++, k++)
+	regs[k] = i, offs[k] = 40 - 4 * (i - 20);
+      regs[k] = LINK_POINTER_REGNUM, offs[k++] = 0;
+    }
+  else
+    {
+      static const int lo[] = { 31, 2, 6, 7, 8, 9 };
+      static const int lo_off[] = { 100, 96, 88, 84, 80, 76 };
+      for (i = 0; i < 6; i++, k++)
+	regs[k] = lo[i], offs[k] = lo_off[i];
+      for (i = 12; i <= 29; i++, k++)
+	regs[k] = i, offs[k] = 68 - 4 * (i - 12);
+      for (i = 0; i < k; i++)
+	offs[i] += INTERRUPT_ALL_SAVE_SIZE - 104;
+    }
+  *n = k;
 }
 
 /* Mark epilogue INSN as defining the CFA as REG + OFFSET.  */
@@ -1957,13 +2013,27 @@ expand_prologue (void)
   /* Save/setup global registers for interrupt functions right now.  */
   if (interrupt_handler)
     {
+      static const int isr_regs[] = { EP_REGNUM, 4, 1, 10, 11 };
+      static const int isr_offs[] = { 0, 4, 8, 12, 16 };
+      rtx_insn *insn;
+
       if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP))
-	emit_insn (gen_callt_save_interrupt ());
+	insn = emit_insn (gen_callt_save_interrupt ());
       else
-	emit_insn (gen_save_interrupt ());
+	insn = emit_insn (gen_save_interrupt ());
+      v850_interrupt_frame_note (insn, - INTERRUPT_FIXED_SAVE_SIZE, 5,
+				 isr_regs, isr_offs);
 
       actual_fsize -= INTERRUPT_FIXED_SAVE_SIZE;
       
+      if (v850_interrupt_state ())
+	{
+	  int state = v850_interrupt_state ();
+	  increment_stack (- v850_interrupt_state_size (state), true);
+	  emit_insn (gen_save_interrupt_state (GEN_INT (state)));
+	  actual_fsize -= v850_interrupt_state_size (state);
+	}
+
       if (((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
 	actual_fsize -= INTERRUPT_ALL_SAVE_SIZE;
 
@@ -2062,10 +2132,16 @@ expand_prologue (void)
       /* Special case interrupt functions that save all registers for a call.  */
       if (interrupt_handler && ((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
 	{
+	  int regs[32], offs[32], n;
+	  rtx_insn *insn;
+
 	  if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP))
-	    emit_insn (gen_callt_save_all_interrupt ());
+	    insn = emit_insn (gen_callt_save_all_interrupt ());
 	  else
-	    emit_insn (gen_save_all_interrupt ());
+	    insn = emit_insn (gen_save_all_interrupt ());
+	  v850_interrupt_save_all_layout (regs, offs, &n);
+	  v850_interrupt_frame_note (insn, - INTERRUPT_ALL_SAVE_SIZE, n, regs,
+				     offs);
 	}
       else
 	{
@@ -2146,6 +2222,7 @@ expand_epilogue (void)
   if (interrupt_handler)
     {
       actual_fsize -= INTERRUPT_FIXED_SAVE_SIZE;
+      actual_fsize -= v850_interrupt_state_size (v850_interrupt_state ());
       if (((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
 	actual_fsize -= INTERRUPT_ALL_SAVE_SIZE;
     }
@@ -2154,8 +2231,7 @@ expand_epilogue (void)
   if (frame_pointer_needed)
     {
       insn = emit_move_insn (stack_pointer_rtx, hard_frame_pointer_rtx);
-      if (! interrupt_handler)
-	v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+      v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
     }
 
   /* Identify all of the saved registers.  */
@@ -2238,18 +2314,24 @@ expand_epilogue (void)
 	{
 	  insn = increment_stack (actual_fsize - init_stack_free, false);
 	  cfa -= actual_fsize - init_stack_free;
-	  if (! interrupt_handler)
-	    v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+	  v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
 	}
 
       /* Special case interrupt functions that save all registers
 	 for a call.  */
       if (interrupt_handler && ((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
 	{
+	  int regs[32], offs[32], n;
+
 	  if (! TARGET_DISABLE_CALLT)
-	    emit_insn (gen_callt_restore_all_interrupt ());
+	    insn = emit_insn (gen_callt_restore_all_interrupt ());
 	  else
-	    emit_insn (gen_restore_all_interrupt ());
+	    insn = emit_insn (gen_restore_all_interrupt ());
+	  cfa -= INTERRUPT_ALL_SAVE_SIZE;
+	  v850_interrupt_save_all_layout (regs, offs, &n);
+	  for (i = 0; i < (unsigned int) n; i++)
+	    v850_epilogue_restore (insn, gen_rtx_REG (SImode, regs[i]));
+	  v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
 	}
       else
 	{
@@ -2264,8 +2346,7 @@ expand_epilogue (void)
 							    stack_pointer_rtx,
 							    offset));
 	      insn = emit_move_insn (restore_regs[--num_restore], mem);
-	      if (! interrupt_handler)
-		v850_epilogue_restore (insn, restore_regs[num_restore]);
+	      v850_epilogue_restore (insn, restore_regs[num_restore]);
 	      offset -= 4;
 	    }
 
@@ -2275,8 +2356,7 @@ expand_epilogue (void)
 							    stack_pointer_rtx,
 							    offset));
 	      insn = emit_move_insn (restore_regs[i], mem);
-	      if (! interrupt_handler)
-		v850_epilogue_restore (insn, restore_regs[i]);
+	      v850_epilogue_restore (insn, restore_regs[i]);
 
 	      emit_use (restore_regs[i]);
 	      offset -= 4;
@@ -2286,15 +2366,26 @@ expand_epilogue (void)
 	  insn = increment_stack (init_stack_free
 				  + crtl->args.pretend_args_size, false);
 	  cfa -= init_stack_free + crtl->args.pretend_args_size;
-	  if (! interrupt_handler)
-	    v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+	  v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
 	}
 
       /* And return or use reti for interrupt handlers.  */
       if (interrupt_handler)
         {
-          if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP))
-            emit_insn (gen_callt_return_interrupt ());
+	  int state = v850_interrupt_state ();
+	  if (state)
+	    {
+	      emit_insn (gen_restore_interrupt_state (GEN_INT (state)));
+	      insn = increment_stack (v850_interrupt_state_size (state), false);
+	      cfa -= v850_interrupt_state_size (state);
+	      v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+	    }
+	  if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP)
+	      && TARGET_V850E3V5_UP
+	      && v850_interrupt_fe_p (current_function_decl))
+	    emit_insn (gen_callt_return_interrupt_fe ());
+	  else if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP))
+	    emit_insn (gen_callt_return_interrupt ());
           else
             emit_jump_insn (gen_return_interrupt ());
 	 }
@@ -2348,8 +2439,7 @@ v850_set_data_area (tree decl, v850_data_area data_area)
 /* Handle an "interrupt" attribute; arguments as in
    struct attribute_spec.handler.  */
 static tree
-v850_handle_interrupt_attribute (tree *node, tree name,
-                                 tree args ATTRIBUTE_UNUSED,
+v850_handle_interrupt_attribute (tree *node, tree name, tree args,
                                  int flags ATTRIBUTE_UNUSED,
                                  bool * no_add_attrs)
 {
@@ -2358,6 +2448,27 @@ v850_handle_interrupt_attribute (tree *node, tree name,
       warning (OPT_Wattributes, "%qE attribute only applies to functions",
 	       name);
       *no_add_attrs = true;
+      return NULL_TREE;
+    }
+
+  if (args)
+    {
+      tree arg = TREE_VALUE (args);
+
+      if (! TARGET_V850E3V5_UP)
+	{
+	  error ("the argument of the %qE attribute needs %<-mv850e3v5%> "
+		 "or later", name);
+	  *no_add_attrs = true;
+	}
+      else if (TREE_CODE (arg) != STRING_CST
+	       || (strcmp (TREE_STRING_POINTER (arg), "EI") != 0
+		   && strcmp (TREE_STRING_POINTER (arg), "FE") != 0))
+	{
+	  error ("argument of the %qE attribute is not %qs or %qs", name,
+		 "EI", "FE");
+	  *no_add_attrs = true;
+	}
     }
 
   return NULL_TREE;
@@ -2459,6 +2570,126 @@ v850_interrupt_function_p (tree func)
 }
 
 
+/* Return true if FUNC is an FE level interrupt function.  */
+
+bool
+v850_interrupt_fe_p (tree func)
+{
+  tree a = lookup_attribute ("interrupt_handler", DECL_ATTRIBUTES (func));
+
+  if (a == NULL_TREE)
+    a = lookup_attribute ("interrupt", DECL_ATTRIBUTES (func));
+  return (a != NULL_TREE && TREE_VALUE (a)
+	  && strcmp (TREE_STRING_POINTER (TREE_VALUE (TREE_VALUE (a))),
+		     "FE") == 0);
+}
+
+/* Return true if the current function uses the FPU.  */
+
+static bool
+v850_function_uses_fpu_p (void)
+{
+  subrtx_iterator::array_type array;
+  bool ret = false;
+
+  push_topmost_sequence ();
+  for (rtx_insn *insn = get_insns (); insn && ! ret; insn = NEXT_INSN (insn))
+    if (NONDEBUG_INSN_P (insn))
+      FOR_EACH_SUBRTX (iter, array, PATTERN (insn), ALL)
+	if (FLOAT_MODE_P (GET_MODE (*iter)))
+	  {
+	    ret = true;
+	    break;
+	  }
+  pop_topmost_sequence ();
+  return ret;
+}
+
+/* RH850 interrupt state to save: 1 EIPC/EIPSW, 2 FPSR/FPEPC, 4 FXSR.  */
+
+int
+v850_interrupt_state (void)
+{
+  int state = 0;
+  bool call_p = df_regs_ever_live_p (LINK_POINTER_REGNUM);
+
+  if (! TARGET_V850E3V5_UP
+      || ! v850_interrupt_function_p (current_function_decl))
+    return 0;
+  if (! v850_interrupt_fe_p (current_function_decl))
+    state |= 1;
+  if (TARGET_USE_FPU && (call_p || v850_function_uses_fpu_p ()))
+    state |= 2;
+  if (TARGET_FXU && call_p)
+    state |= 4;
+  return state;
+}
+
+/* Return the instruction that ends the current interrupt function.  */
+
+const char *
+v850_interrupt_return_insn (void)
+{
+  if (! TARGET_V850E3V5_UP)
+    return "reti";
+  return v850_interrupt_fe_p (current_function_decl) ? "feret" : "eiret";
+}
+
+/* Output the save (SAVE_P) or the restore of the interrupt STATE block.  */
+
+const char *
+v850_output_interrupt_state (int state, bool save_p)
+{
+  static const char *const name[] = { "eipc", "eipsw", "fpsr", "fpepc",
+				      "fxsr" };
+  int reg[5], n = 0, i;
+  char buf[64];
+
+  if (state & 1)
+    {
+      reg[n++] = 0;
+      reg[n++] = 1;
+    }
+  if (state & 2)
+    {
+      reg[n++] = 2;
+      reg[n++] = 3;
+    }
+  if (state & 4)
+    reg[n++] = 4;
+  if (save_p)
+    {
+      for (i = 0; i < n; i++)
+	{
+	  sprintf (buf, "stsr %s, r10", name[reg[i]]);
+	  output_asm_insn (buf, NULL);
+	  sprintf (buf, "st.w r10, %d[sp]", 4 * i);
+	  output_asm_insn (buf, NULL);
+	}
+      return "";
+    }
+  if (state & 2)
+    output_asm_insn ("synce", NULL);
+  if (state & 1)
+    output_asm_insn ("di", NULL);
+  for (i = n - 1; i >= 0; i--)
+    {
+      sprintf (buf, "ld.w %d[sp], r10", 4 * i);
+      output_asm_insn (buf, NULL);
+      sprintf (buf, "ldsr r10, %s", name[reg[i]]);
+      output_asm_insn (buf, NULL);
+    }
+  return "";
+}
+
+/* Return the size of the interrupt state block for STATE.  */
+
+int
+v850_interrupt_state_size (int state)
+{
+  return ((state & 1) ? 8 : 0) + ((state & 2) ? 8 : 0) + ((state & 4) ? 4 : 0);
+}
+
 static void
 v850_encode_data_area (tree decl, rtx symbol)
 {
@@ -3604,9 +3835,9 @@ TARGET_GNU_ATTRIBUTES (v850_attribute_table,
 {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
        affects_type_identity, handler, exclude } */
-  { "interrupt_handler", 0, 0, true,  false, false, false,
+  { "interrupt_handler", 0, 1, true,  false, false, false,
     v850_handle_interrupt_attribute, NULL },
-  { "interrupt",         0, 0, true,  false, false, false,
+  { "interrupt",	 0, 1, true,  false, false, false,
     v850_handle_interrupt_attribute, NULL },
   { "sda",               0, 0, true,  false, false, false,
     v850_handle_data_area_attribute, NULL },
