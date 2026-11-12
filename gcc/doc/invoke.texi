@@ -1418,6 +1418,7 @@ See RS/6000 and PowerPC Options.
 -mv850e2v3  -mv850e2  -mv850e1  -mv850es
 -mv850e  -mv850  -mv850e3v5
 -mloop
+-mg4
 -mrelax
 -mlong-jumps
 -msoft-float
@@ -34051,6 +34052,13 @@ instructions are being generated then the C preprocessor symbol
 Enables the use of the e3v5 LOOP instruction.  The use of this
 instruction is not enabled by default when the e3v5 architecture is
 selected because its use is still experimental.
+
+@opindex mg4
+@item -mg4
+Enables the instructions of the RH850 G4 cores (G4KH, G4MH) on top of
+the v850e3v5 architecture, and passes @option{-mg4} to the assembler.
+It implies @option{-mv850e3v5}.  The preprocessor constant
+@code{__V850_G4__} is defined if this option is used.
 
 @opindex mrh850-abi
 @opindex mghs

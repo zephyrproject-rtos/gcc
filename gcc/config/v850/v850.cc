@@ -3236,6 +3236,13 @@ v850_option_override (void)
   if (! TARGET_GCC_ABI && small_memory_max[(int) SMALL_MEMORY_TDA] > 0)
     error ("%<-mtda%> is not supported with the RH850 ABI; use %<-mgcc-abi%>");
 
+  if (TARGET_G4 && ! TARGET_V850E3V5)
+    {
+      if (target_flags & MASK_CPU)
+	error ("%<-mg4%> requires %<-mv850e3v5%>");
+      target_flags |= MASK_V850E3V5;
+    }
+
   /* Save the initial options in case the user does function specific
      options.  */
   target_option_default_node = target_option_current_node

@@ -123,6 +123,10 @@ mloop
 Target Mask(LOOP)
 Enable v850e3v5 loop instructions.
 
+mg4
+Target Mask(G4)
+Enable the RH850 G4 instructions.
+
 mzda=
 Target RejectNegative Joined UInteger
 Set the max size of data eligible for the ZDA area.

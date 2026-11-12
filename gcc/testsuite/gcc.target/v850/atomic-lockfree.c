@@ -1,5 +1,6 @@
 /* { dg-do preprocess } */
 /* { dg-options "-mv850e3v5" } */
+/* { dg-skip-if "tests the code without -mg4" { *-*-* } { "-mg4" } { "" } } */
 
 #if __GCC_ATOMIC_INT_LOCK_FREE != 2 || __GCC_ATOMIC_LONG_LOCK_FREE != 2 \
     || __GCC_ATOMIC_POINTER_LOCK_FREE != 2
