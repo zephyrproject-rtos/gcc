@@ -1122,6 +1122,14 @@ Saved %d bytes (%d uses of register %s) in function %s, starting as insn %d, end
 	{
 	  rtx pattern = single_set (insn);
 
+	  if (pattern && RTX_FRAME_RELATED_P (insn)
+	      && ! find_reg_note (insn, REG_FRAME_RELATED_EXPR, NULL_RTX)
+	      && ! find_reg_note (insn, REG_CFA_OFFSET, NULL_RTX)
+	      && ! find_reg_note (insn, REG_CFA_RESTORE, NULL_RTX)
+	      && ! find_reg_note (insn, REG_CFA_DEF_CFA, NULL_RTX)
+	      && ! find_reg_note (insn, REG_CFA_ADJUST_CFA, NULL_RTX))
+	    add_reg_note (insn, REG_FRAME_RELATED_EXPR, copy_rtx (pattern));
+
 	  /* Replace the memory references.  */
 	  if (pattern)
 	    {
@@ -1587,13 +1595,14 @@ use_prolog_function (int num_save, int frame_size)
   return ((save_func_len + restore_func_len) < (save_normal_len + restore_normal_len));
 }
 
-static void
+static rtx_insn *
 increment_stack (signed int amount, bool in_prologue)
 {
   rtx inc;
+  rtx_insn *insn;
 
   if (amount == 0)
-    return;
+    return NULL;
 
   inc = GEN_INT (amount);
 
@@ -1607,9 +1616,31 @@ increment_stack (signed int amount, bool in_prologue)
       inc = reg;
     }
 
-  inc = emit_insn (gen_addsi3_clobber_flags (stack_pointer_rtx, stack_pointer_rtx, inc));
+  insn = emit_insn (gen_addsi3_clobber_flags (stack_pointer_rtx,
+					     stack_pointer_rtx, inc));
   if (in_prologue)
-    F (inc);
+    F (insn);
+  return insn;
+}
+
+/* Mark epilogue INSN as defining the CFA as REG + OFFSET.  */
+
+static void
+v850_epilogue_def_cfa (rtx_insn *insn, rtx reg, HOST_WIDE_INT offset)
+{
+  if (insn == NULL)
+    return;
+  RTX_FRAME_RELATED_P (insn) = 1;
+  add_reg_note (insn, REG_CFA_DEF_CFA, plus_constant (Pmode, reg, offset));
+}
+
+/* Mark epilogue INSN as restoring REG.  */
+
+static void
+v850_epilogue_restore (rtx_insn *insn, rtx reg)
+{
+  RTX_FRAME_RELATED_P (insn) = 1;
+  add_reg_note (insn, REG_CFA_RESTORE, reg);
 }
 
 void
@@ -1722,6 +1753,7 @@ expand_prologue (void)
 	  if (code >= 0)
 	    {
 	      rtx insn = emit_insn (save_all);
+	      F (insn);
 	      INSN_CODE (insn) = code;
 	      actual_fsize -= alloc_stack;
 	      
@@ -1807,6 +1839,8 @@ expand_epilogue (void)
   unsigned int num_restore;
   int code;
   int interrupt_handler = v850_interrupt_function_p (current_function_decl);
+  HOST_WIDE_INT cfa = actual_fsize + crtl->args.pretend_args_size;
+  rtx_insn *insn;
 
   /* Eliminate the initial stack stored by interrupt functions.  */
   if (interrupt_handler)
@@ -1818,7 +1852,11 @@ expand_epilogue (void)
 
   /* Cut off any dynamic stack created.  */
   if (frame_pointer_needed)
-    emit_move_insn (stack_pointer_rtx, hard_frame_pointer_rtx);
+    {
+      insn = emit_move_insn (stack_pointer_rtx, hard_frame_pointer_rtx);
+      if (! interrupt_handler)
+	v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+    }
 
   /* Identify all of the saved registers.  */
   num_restore = 0;
@@ -1868,10 +1906,10 @@ expand_epilogue (void)
 	  
 	  if (code >= 0)
 	    {
-	      rtx insn;
-
 	      actual_fsize -= alloc_stack;
-	      increment_stack (actual_fsize, false);
+	      insn = increment_stack (actual_fsize, false);
+	      v850_epilogue_def_cfa (insn, stack_pointer_rtx,
+				     cfa - actual_fsize);
 
 	      insn = emit_jump_insn (restore_all);
 	      INSN_CODE (insn) = code;
@@ -1897,7 +1935,12 @@ expand_epilogue (void)
 
       /* Deallocate the rest of the stack if it is > 32K.  */
       if ((unsigned int) actual_fsize > init_stack_free)
-	increment_stack (actual_fsize - init_stack_free, false);
+	{
+	  insn = increment_stack (actual_fsize - init_stack_free, false);
+	  cfa -= actual_fsize - init_stack_free;
+	  if (! interrupt_handler)
+	    v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+	}
 
       /* Special case interrupt functions that save all registers
 	 for a call.  */
@@ -1917,29 +1960,34 @@ expand_epilogue (void)
 	  if (num_restore > 0
 	      && REGNO (restore_regs [num_restore - 1]) == LINK_POINTER_REGNUM)
 	    {
-	      emit_move_insn (restore_regs[--num_restore],
-			      gen_rtx_MEM (SImode,
-					   plus_constant (Pmode,
-							  stack_pointer_rtx,
-							  offset)));
+	      rtx mem = gen_rtx_MEM (SImode, plus_constant (Pmode,
+							    stack_pointer_rtx,
+							    offset));
+	      insn = emit_move_insn (restore_regs[--num_restore], mem);
+	      if (! interrupt_handler)
+		v850_epilogue_restore (insn, restore_regs[num_restore]);
 	      offset -= 4;
 	    }
 
 	  for (i = 0; i < num_restore; i++)
 	    {
-	      emit_move_insn (restore_regs[i],
-			      gen_rtx_MEM (SImode,
-					   plus_constant (Pmode,
-							  stack_pointer_rtx,
-							  offset)));
+	      rtx mem = gen_rtx_MEM (SImode, plus_constant (Pmode,
+							    stack_pointer_rtx,
+							    offset));
+	      insn = emit_move_insn (restore_regs[i], mem);
+	      if (! interrupt_handler)
+		v850_epilogue_restore (insn, restore_regs[i]);
 
 	      emit_use (restore_regs[i]);
 	      offset -= 4;
 	    }
 
 	  /* Cut back the remainder of the stack.  */
-	  increment_stack (init_stack_free + crtl->args.pretend_args_size,
-			   false);
+	  insn = increment_stack (init_stack_free
+				  + crtl->args.pretend_args_size, false);
+	  cfa -= init_stack_free + crtl->args.pretend_args_size;
+	  if (! interrupt_handler)
+	    v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
 	}
 
       /* And return or use reti for interrupt handlers.  */
