@@ -1415,14 +1415,13 @@ v850_reorg (void)
 /* # of registers saved by the interrupt handler.  */
 #define INTERRUPT_FIXED_NUM 5
 
-/* # of bytes for registers saved by the interrupt handler.  */
-#define INTERRUPT_FIXED_SAVE_SIZE (4 * INTERRUPT_FIXED_NUM)
+#define INTERRUPT_FIXED_SAVE_SIZE \
+  (4 * INTERRUPT_FIXED_NUM \
+   + (! TARGET_DISABLE_CALLT && TARGET_V850E_UP ? 8 : 0))
 
-/* # of words saved for other registers.  */
-#define INTERRUPT_ALL_SAVE_NUM \
-  (30 - INTERRUPT_FIXED_NUM)
-
-#define INTERRUPT_ALL_SAVE_SIZE (4 * INTERRUPT_ALL_SAVE_NUM)
+#define INTERRUPT_ALL_SAVE_SIZE \
+  ((! TARGET_DISABLE_CALLT && TARGET_V850E_UP) \
+   || (TARGET_PROLOG_FUNCTION && ! TARGET_LONG_CALLS) ? 104 : 120)
 
 int
 compute_register_save_size (long * p_reg_saved)
@@ -1464,6 +1463,9 @@ compute_register_save_size (long * p_reg_saved)
 	    size += 4;
 	    break;
 	  }
+      size += INTERRUPT_FIXED_SAVE_SIZE - 4 * INTERRUPT_FIXED_NUM;
+      if (call_p)
+	size += INTERRUPT_ALL_SAVE_SIZE - 4 * 25;
     }
   else
     {
@@ -1782,7 +1784,7 @@ expand_prologue (void)
 	     register saves.  We use the register save size so we use the ep
 	     register.  */
 	  if (actual_fsize && !CONST_OK_FOR_K (-actual_fsize))
-	    init_stack_alloc = compute_register_save_size (NULL);
+	    init_stack_alloc = 4 * num_save;
 	  else
 	    init_stack_alloc = actual_fsize;
 	      
@@ -1926,7 +1928,7 @@ expand_epilogue (void)
       unsigned int init_stack_free;
 
       /* If the stack is large, we need to cut it down in 2 pieces.  */
-      if (interrupt_handler)
+      if (interrupt_handler && ((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
        init_stack_free = 0;
       else if (actual_fsize && !CONST_OK_FOR_K (-actual_fsize))
 	init_stack_free = 4 * num_restore;
@@ -2752,6 +2754,7 @@ construct_prepare_instruction (rtx op)
   int		     i;
   static char        buff[ 120 ]; /* XXX */
   int		     use_callt = 0;
+  unsigned long int  full;
   
   if (XVECLEN (op, 0) <= 1)
     {
@@ -2800,18 +2803,21 @@ construct_prepare_instruction (rtx op)
 
   stack_bytes += count * 4;
 
+  for (i = 20; i < 32; i++)
+    if (mask & (1 << i))
+      break;
+  full = i < 30 ? (1UL << 30) - (1UL << i) : 0;
+
   if ((! TARGET_DISABLE_CALLT)
-      && (use_callt || stack_bytes == 0))
+      && (use_callt
+	  || (stack_bytes == 0 && (mask & (1UL << 30)) == 0
+	      && (mask & 0x3fffffff) == full)))
     {
       if (use_callt)
 	{
 	  sprintf (buff, "callt ctoff(__callt_save_r2_r%d)", (mask & (1 << 31)) ? 31 : 29 );
 	  return buff;
 	}
-      
-      for (i = 20; i < 32; i++)
-	if (mask & (1 << i))
-	  break;
 
       if (i == 31)
 	sprintf (buff, "callt ctoff(__callt_save_r31c)");
