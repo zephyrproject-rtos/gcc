@@ -46,6 +46,7 @@
 #include "expr.h"
 #include "explow.h"
 #include "optabs.h"
+#include "langhooks.h"
 #include "cfgrtl.h"
 #include "builtins.h"
 
@@ -3918,6 +3919,335 @@ v850_can_inline_p (tree caller, tree callee)
 }
 
 
+/* FXU builtins.  */
+
+enum v850_fxu_ftype
+{
+  FXU_V4SF_V4SF,
+  FXU_V4SF_V4SF_V4SF,
+  FXU_V4SF_V4SF_V4SF_V4SF,
+  FXU_V4SI_V4SF,
+  FXU_V4SF_V4SI,
+  FXU_V4SI_V4SF_V4SF_INT,
+  FXU_V4SF_V4SI_V4SF_V4SF,
+  FXU_V4SI_V4SI_V4SI_V4SI,
+  FXU_V4SF_V4SF_V4SF_INT,
+  FXU_V4SI_V4SI_V4SI_INT,
+  FXU_V4SF_V4SF_INT,
+  FXU_INT_V4SI_INT,
+  FXU_V4SF_V4SF_PCVOID_INT,
+  FXU_V4SF_PCVOID,
+  FXU_V4SI_PCVOID,
+  FXU_VOID_PVOID_V4SF_INT,
+  FXU_VOID_PVOID_V4SF,
+  FXU_VOID_PVOID_V4SI
+};
+
+enum v850_fxu_kind { FXU_OP, FXU_LOAD, FXU_STORE };
+
+struct v850_fxu_builtin
+{
+  const char *name;
+  enum insn_code icode;
+  enum v850_fxu_ftype ftype;
+  enum v850_fxu_kind kind;
+  machine_mode mem_mode;
+  int imm_max;
+};
+
+static const struct v850_fxu_builtin v850_fxu_builtins[] =
+{
+  { "addf_s4", CODE_FOR_addv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "subf_s4", CODE_FOR_subv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "mulf_s4", CODE_FOR_mulv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "divf_s4", CODE_FOR_divv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "maxf_s4", CODE_FOR_smaxv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "minf_s4", CODE_FOR_sminv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "absf_s4", CODE_FOR_absv4sf2, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "negf_s4", CODE_FOR_negv4sf2, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "sqrtf_s4", CODE_FOR_sqrtv4sf2, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "recipf_s4", CODE_FOR_fxu_recipf, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "rsqrtf_s4", CODE_FOR_fxu_rsqrtf, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "fmaf_s4", CODE_FOR_fmav4sf4, FXU_V4SF_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "fmsf_s4", CODE_FOR_fmsv4sf4, FXU_V4SF_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "fnmaf_s4", CODE_FOR_fxu_fnmaf, FXU_V4SF_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "fnmsf_s4", CODE_FOR_fxu_fnmsf, FXU_V4SF_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addsubf_s4", CODE_FOR_fxu_addsubf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addsubnf_s4", CODE_FOR_fxu_addsubnf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "subaddf_s4", CODE_FOR_fxu_subaddf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "subaddnf_s4", CODE_FOR_fxu_subaddnf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addxf_s4", CODE_FOR_fxu_addxf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "subxf_s4", CODE_FOR_fxu_subxf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "mulxf_s4", CODE_FOR_fxu_mulxf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "addsubxf_s4", CODE_FOR_fxu_addsubxf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addsubnxf_s4", CODE_FOR_fxu_addsubnxf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "subaddxf_s4", CODE_FOR_fxu_subaddxf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "subaddnxf_s4", CODE_FOR_fxu_subaddnxf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addrf_s4", CODE_FOR_fxu_addrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "subrf_s4", CODE_FOR_fxu_subrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "mulrf_s4", CODE_FOR_fxu_mulrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "maxrf_s4", CODE_FOR_fxu_maxrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "minrf_s4", CODE_FOR_fxu_minrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "ceilf_sw4", CODE_FOR_fxu_ceilf_sw4, FXU_V4SI_V4SF, FXU_OP, VOIDmode, -1 },
+  { "ceilf_suw4", CODE_FOR_fxu_ceilf_suw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "floorf_sw4", CODE_FOR_fxu_floorf_sw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "floorf_suw4", CODE_FOR_fxu_floorf_suw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "roundf_sw4", CODE_FOR_fxu_roundf_sw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "roundf_suw4", CODE_FOR_fxu_roundf_suw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "trncf_sw4", CODE_FOR_fix_truncv4sfv4si2, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "trncf_suw4", CODE_FOR_fixuns_truncv4sfv4si2, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "cvtf_sw4", CODE_FOR_fxu_cvtf_sw4, FXU_V4SI_V4SF, FXU_OP, VOIDmode, -1 },
+  { "cvtf_suw4", CODE_FOR_fxu_cvtf_suw4, FXU_V4SI_V4SF, FXU_OP, VOIDmode, -1 },
+  { "cvtf_ws4", CODE_FOR_floatv4siv4sf2, FXU_V4SF_V4SI, FXU_OP, VOIDmode, -1 },
+  { "cvtf_uws4", CODE_FOR_floatunsv4siv4sf2, FXU_V4SF_V4SI,
+    FXU_OP, VOIDmode, -1 },
+  { "cvtf_sh4", CODE_FOR_fxu_cvtf_sh4, FXU_V4SI_V4SF, FXU_OP, VOIDmode, -1 },
+  { "cvtf_hs4", CODE_FOR_fxu_cvtf_hs4, FXU_V4SF_V4SI, FXU_OP, VOIDmode, -1 },
+  { "cmpf_s4", CODE_FOR_fxu_cmpf, FXU_V4SI_V4SF_V4SF_INT,
+    FXU_OP, VOIDmode, 15 },
+  { "cmovf_w4", CODE_FOR_fxu_cmovfv4sf, FXU_V4SF_V4SI_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "cmovf_w4i", CODE_FOR_fxu_cmovfv4si, FXU_V4SI_V4SI_V4SI_V4SI,
+    FXU_OP, VOIDmode, -1 },
+  { "shflv_w4", CODE_FOR_fxu_shflvv4sf, FXU_V4SF_V4SF_V4SF_INT,
+    FXU_OP, VOIDmode, 4095 },
+  { "shflv_w4i", CODE_FOR_fxu_shflvv4si, FXU_V4SI_V4SI_V4SI_INT,
+    FXU_OP, VOIDmode, 4095 },
+  { "flpv_s4", CODE_FOR_fxu_flpv, FXU_V4SF_V4SF_INT, FXU_OP, VOIDmode, 3 },
+  { "trfsrv_w4", CODE_FOR_fxu_trfsrv, FXU_INT_V4SI_INT, FXU_OP, VOIDmode, 5 },
+  { "ldv_w", CODE_FOR_fxu_ldv_wv4sf, FXU_V4SF_V4SF_PCVOID_INT,
+    FXU_LOAD, SImode, 15 },
+  { "ldv_dw", CODE_FOR_fxu_ldv_dwv4sf, FXU_V4SF_V4SF_PCVOID_INT,
+    FXU_LOAD, DImode, 3 },
+  { "ldv_qw", CODE_FOR_nothing, FXU_V4SF_PCVOID, FXU_LOAD, V4SFmode, -1 },
+  { "ldvz_h4", CODE_FOR_fxu_ldvz_h4, FXU_V4SI_PCVOID, FXU_LOAD, DImode, -1 },
+  { "stv_w", CODE_FOR_fxu_stv_wv4sf, FXU_VOID_PVOID_V4SF_INT,
+    FXU_STORE, SImode, 3 },
+  { "stv_dw", CODE_FOR_fxu_stv_dwv4sf, FXU_VOID_PVOID_V4SF_INT,
+    FXU_STORE, DImode, 1 },
+  { "stv_qw", CODE_FOR_nothing, FXU_VOID_PVOID_V4SF, FXU_STORE, V4SFmode, -1 },
+  { "stvz_h4", CODE_FOR_fxu_stvz_h4, FXU_VOID_PVOID_V4SI,
+    FXU_STORE, DImode, -1 },
+};
+
+static GTY(()) tree v850_fxu_builtin_decls[ARRAY_SIZE (v850_fxu_builtins)];
+
+static tree
+v850_fxu_type (enum v850_fxu_ftype ftype)
+{
+  tree v4sf = build_vector_type (float_type_node, 4);
+  tree v4si = build_vector_type (intSI_type_node, 4);
+  tree pcvoid = build_pointer_type (build_qualified_type (void_type_node,
+							  TYPE_QUAL_CONST));
+  tree pvoid = ptr_type_node;
+  tree i = integer_type_node;
+
+  switch (ftype)
+    {
+    case FXU_V4SF_V4SF:
+      return build_function_type_list (v4sf, v4sf, NULL_TREE);
+    case FXU_V4SF_V4SF_V4SF:
+      return build_function_type_list (v4sf, v4sf, v4sf, NULL_TREE);
+    case FXU_V4SF_V4SF_V4SF_V4SF:
+      return build_function_type_list (v4sf, v4sf, v4sf, v4sf, NULL_TREE);
+    case FXU_V4SI_V4SF:
+      return build_function_type_list (v4si, v4sf, NULL_TREE);
+    case FXU_V4SF_V4SI:
+      return build_function_type_list (v4sf, v4si, NULL_TREE);
+    case FXU_V4SI_V4SF_V4SF_INT:
+      return build_function_type_list (v4si, v4sf, v4sf, i, NULL_TREE);
+    case FXU_V4SF_V4SI_V4SF_V4SF:
+      return build_function_type_list (v4sf, v4si, v4sf, v4sf, NULL_TREE);
+    case FXU_V4SI_V4SI_V4SI_V4SI:
+      return build_function_type_list (v4si, v4si, v4si, v4si, NULL_TREE);
+    case FXU_V4SF_V4SF_V4SF_INT:
+      return build_function_type_list (v4sf, v4sf, v4sf, i, NULL_TREE);
+    case FXU_V4SI_V4SI_V4SI_INT:
+      return build_function_type_list (v4si, v4si, v4si, i, NULL_TREE);
+    case FXU_V4SF_V4SF_INT:
+      return build_function_type_list (v4sf, v4sf, i, NULL_TREE);
+    case FXU_INT_V4SI_INT:
+      return build_function_type_list (i, v4si, i, NULL_TREE);
+    case FXU_V4SF_V4SF_PCVOID_INT:
+      return build_function_type_list (v4sf, v4sf, pcvoid, i, NULL_TREE);
+    case FXU_V4SF_PCVOID:
+      return build_function_type_list (v4sf, pcvoid, NULL_TREE);
+    case FXU_V4SI_PCVOID:
+      return build_function_type_list (v4si, pcvoid, NULL_TREE);
+    case FXU_VOID_PVOID_V4SF_INT:
+      return build_function_type_list (void_type_node, pvoid, v4sf, i,
+				       NULL_TREE);
+    case FXU_VOID_PVOID_V4SF:
+      return build_function_type_list (void_type_node, pvoid, v4sf, NULL_TREE);
+    case FXU_VOID_PVOID_V4SI:
+      return build_function_type_list (void_type_node, pvoid, v4si, NULL_TREE);
+    }
+  gcc_unreachable ();
+}
+
+/* Implement TARGET_INIT_BUILTINS.  */
+
+static void
+v850_init_builtins (void)
+{
+  if (! TARGET_FXU)
+    return;
+
+  for (unsigned int i = 0; i < ARRAY_SIZE (v850_fxu_builtins); i++)
+    {
+      char name[64];
+
+      snprintf (name, sizeof (name), "__builtin_v850_%s",
+		v850_fxu_builtins[i].name);
+      tree type = v850_fxu_type (v850_fxu_builtins[i].ftype);
+      v850_fxu_builtin_decls[i]
+	= add_builtin_function (name, type, i, BUILT_IN_MD, NULL, NULL_TREE);
+    }
+}
+
+/* Implement TARGET_BUILTIN_DECL.  */
+
+static tree
+v850_builtin_decl (unsigned int code, bool)
+{
+  if (code >= ARRAY_SIZE (v850_fxu_builtins))
+    return error_mark_node;
+  return v850_fxu_builtin_decls[code];
+}
+
+/* Return operand ARGNO of call EXP as a constant in [0, MAX].  */
+
+static rtx
+v850_fxu_imm (tree exp, int argno, int max)
+{
+  tree arg = CALL_EXPR_ARG (exp, argno);
+
+  if (TREE_CODE (arg) != INTEGER_CST
+      || ! IN_RANGE (TREE_INT_CST_LOW (arg), 0, max)
+      || ! tree_fits_uhwi_p (arg))
+    {
+      error_at (EXPR_LOCATION (exp),
+		"argument %d must be a constant in the range 0 to %d",
+		argno + 1, max);
+      return const0_rtx;
+    }
+  return GEN_INT (TREE_INT_CST_LOW (arg));
+}
+
+static rtx
+v850_fxu_vec (tree exp, int argno, machine_mode mode)
+{
+  rtx x = expand_normal (CALL_EXPR_ARG (exp, argno));
+
+  if (GET_MODE (x) != mode)
+    x = gen_lowpart (mode, force_reg (GET_MODE (x), x));
+  return force_reg (mode, x);
+}
+
+static rtx
+v850_fxu_mem (tree exp, int argno, machine_mode mode)
+{
+  rtx addr = force_reg (Pmode, expand_normal (CALL_EXPR_ARG (exp, argno)));
+  rtx mem = gen_rtx_MEM (mode, addr);
+
+  set_mem_align (mem, GET_MODE_BITSIZE (mode) >= 128 ? 128 : BITS_PER_WORD);
+  return mem;
+}
+
+/* Implement TARGET_EXPAND_BUILTIN.  */
+
+static rtx
+v850_expand_builtin (tree exp, rtx target, rtx, machine_mode, int)
+{
+  tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
+  const struct v850_fxu_builtin *b
+    = &v850_fxu_builtins[DECL_MD_FUNCTION_CODE (fndecl)];
+  int nargs = call_expr_nargs (exp);
+  machine_mode tmode = TYPE_MODE (TREE_TYPE (exp));
+  rtx ops[4];
+
+  if (b->kind == FXU_STORE)
+    {
+      rtx mem = v850_fxu_mem (exp, 0, b->mem_mode);
+      rtx v = v850_fxu_vec (exp, 1, b->ftype == FXU_VOID_PVOID_V4SI
+				    ? V4SImode : V4SFmode);
+      if (b->icode == CODE_FOR_nothing)
+	emit_move_insn (mem, v);
+      else if (nargs == 3)
+	emit_insn (GEN_FCN (b->icode) (mem, v, v850_fxu_imm (exp, 2,
+							   b->imm_max)));
+      else
+	emit_insn (GEN_FCN (b->icode) (mem, v));
+      return const0_rtx;
+    }
+
+  if (target == NULL_RTX || GET_MODE (target) != tmode
+      || ! register_operand (target, tmode))
+    target = gen_reg_rtx (tmode);
+
+  if (b->kind == FXU_LOAD)
+    {
+      if (b->icode == CODE_FOR_nothing)
+	emit_move_insn (target, v850_fxu_mem (exp, 0, b->mem_mode));
+      else if (nargs == 3)
+	{
+	  rtx v = v850_fxu_vec (exp, 0, tmode);
+	  rtx mem = v850_fxu_mem (exp, 1, b->mem_mode);
+	  emit_insn (GEN_FCN (b->icode) (target, v, mem,
+					 v850_fxu_imm (exp, 2, b->imm_max)));
+	}
+      else
+	emit_insn (GEN_FCN (b->icode) (target,
+				       v850_fxu_mem (exp, 0, b->mem_mode)));
+      return target;
+    }
+
+  for (int i = 0; i < nargs; i++)
+    {
+      const insn_operand_data *od = &insn_data[b->icode].operand[i + 1];
+
+      if (i == nargs - 1 && b->imm_max >= 0)
+	ops[i] = v850_fxu_imm (exp, i, b->imm_max);
+      else
+	ops[i] = v850_fxu_vec (exp, i, od->mode);
+    }
+
+  switch (nargs)
+    {
+    case 1:
+      emit_insn (GEN_FCN (b->icode) (target, ops[0]));
+      break;
+    case 2:
+      emit_insn (GEN_FCN (b->icode) (target, ops[0], ops[1]));
+      break;
+    case 3:
+      emit_insn (GEN_FCN (b->icode) (target, ops[0], ops[1], ops[2]));
+      break;
+    default:
+      gcc_unreachable ();
+    }
+  return target;
+}
+
 /* Initialize the GCC target structure.  */
 
 #undef  TARGET_OPTION_OVERRIDE
@@ -4048,6 +4378,15 @@ v850_can_inline_p (tree caller, tree callee)
 
 #undef  TARGET_UPDATE_STACK_BOUNDARY
 #define TARGET_UPDATE_STACK_BOUNDARY v850_update_stack_boundary
+
+#undef  TARGET_INIT_BUILTINS
+#define TARGET_INIT_BUILTINS v850_init_builtins
+
+#undef  TARGET_BUILTIN_DECL
+#define TARGET_BUILTIN_DECL v850_builtin_decl
+
+#undef  TARGET_EXPAND_BUILTIN
+#define TARGET_EXPAND_BUILTIN v850_expand_builtin
 
 #undef  TARGET_MODES_TIEABLE_P
 #define TARGET_MODES_TIEABLE_P v850_modes_tieable_p

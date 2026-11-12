@@ -34081,6 +34081,7 @@ are 16-byte aligned.  The vector registers are preserved across calls.
 Vector arguments are passed in @code{wr0} to @code{wr31} and then on the
 stack, and vector return values in memory.  A function that keeps vector
 values on the stack aligns its frame to 16 bytes at run time.  The
+header @file{v850_fxu.h} declares the FXU types and intrinsics.  The
 preprocessor constant @code{__V850_FXU__} is defined if this option is
 used.
 

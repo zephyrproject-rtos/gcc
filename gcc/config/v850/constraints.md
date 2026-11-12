@@ -119,3 +119,8 @@
   "@internal"
   (and (match_code "mem")
        (match_test "v850_fxu_mem_p (op, 8, reload_completed)")))
+
+(define_memory_constraint "Yw"
+  "@internal"
+  (and (match_code "mem")
+       (match_test "v850_fxu_mem_p (op, 4, reload_completed)")))

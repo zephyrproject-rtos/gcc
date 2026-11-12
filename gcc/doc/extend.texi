@@ -15858,6 +15858,7 @@ instructions, but allow the compiler to schedule those calls.
 * PowerPC Atomic Memory Operation Functions::
 * PowerPC Matrix-Multiply Assist Built-in Functions::
 * PRU Built-in Functions::
+* RH850 FXU Built-in Functions::
 * RISC-V Built-in Functions::
 * RISC-V Vector Intrinsics::
 * CORE-V Built-in Functions::
@@ -24290,6 +24291,267 @@ This inserts LMBD instruction to calculate the left-most bit with value
 of @var{bitval} is taken into account.
 @enddefbuiltin
 
+@node RH850 FXU Built-in Functions
+@subsection RH850 FXU Built-in Functions
+
+With @option{-mfxu}, GCC provides a built-in function for each RH850
+FXU instruction.  The header @file{v850_fxu.h} defines the vector types
+@code{__v850_v4sf} (four @code{float}), @code{__v850_v4si} (four
+@code{int}) and @code{__v850_v4su} (four @code{unsigned int}), and the
+compatible names @code{__ev128_f32__}, @code{__ev128_create_f32},
+@code{__ev128_set_f32}, @code{__ev128_get_f32} and @code{__ev128_addfs}.
+An @code{int} argument after the vector operands is an immediate operand
+of the instruction and must be a constant in its range.  The functions
+whose names end in @code{i} operate on integer vectors.
+
+@defbuiltin{__v850_v4sf __builtin_v850_addf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{addf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_subf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{subf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_mulf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{mulf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_divf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{divf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_maxf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{maxf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_minf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{minf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_absf_s4 (__v850_v4sf)}
+Generates the @code{absf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_negf_s4 (__v850_v4sf)}
+Generates the @code{negf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_sqrtf_s4 (__v850_v4sf)}
+Generates the @code{sqrtf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_recipf_s4 (__v850_v4sf)}
+Generates the @code{recipf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_rsqrtf_s4 (__v850_v4sf)}
+Generates the @code{rsqrtf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_fmaf_s4 (__v850_v4sf, __v850_v4sf, __v850_v4sf)}
+Generates the @code{fmaf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_fmsf_s4 (__v850_v4sf, __v850_v4sf, __v850_v4sf)}
+Generates the @code{fmsf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_fnmaf_s4 (__v850_v4sf, __v850_v4sf, __v850_v4sf)}
+Generates the @code{fnmaf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_fnmsf_s4 (__v850_v4sf, __v850_v4sf, __v850_v4sf)}
+Generates the @code{fnmsf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_addsubf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{addsubf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_addsubnf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{addsubnf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_subaddf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{subaddf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_subaddnf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{subaddnf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_addxf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{addxf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_subxf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{subxf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_mulxf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{mulxf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_addsubxf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{addsubxf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_addsubnxf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{addsubnxf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_subaddxf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{subaddxf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_subaddnxf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{subaddnxf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_addrf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{addrf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_subrf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{subrf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_mulrf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{mulrf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_maxrf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{maxrf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_minrf_s4 (__v850_v4sf, __v850_v4sf)}
+Generates the @code{minrf.s4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_ceilf_sw4 (__v850_v4sf)}
+Generates the @code{ceilf.sw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_ceilf_suw4 (__v850_v4sf)}
+Generates the @code{ceilf.suw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_floorf_sw4 (__v850_v4sf)}
+Generates the @code{floorf.sw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_floorf_suw4 (__v850_v4sf)}
+Generates the @code{floorf.suw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_roundf_sw4 (__v850_v4sf)}
+Generates the @code{roundf.sw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_roundf_suw4 (__v850_v4sf)}
+Generates the @code{roundf.suw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_trncf_sw4 (__v850_v4sf)}
+Generates the @code{trncf.sw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_trncf_suw4 (__v850_v4sf)}
+Generates the @code{trncf.suw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_cvtf_sw4 (__v850_v4sf)}
+Generates the @code{cvtf.sw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_cvtf_suw4 (__v850_v4sf)}
+Generates the @code{cvtf.suw4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_cvtf_ws4 (__v850_v4si)}
+Generates the @code{cvtf.ws4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_cvtf_uws4 (__v850_v4si)}
+Generates the @code{cvtf.uws4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_cvtf_sh4 (__v850_v4sf)}
+Generates the @code{cvtf.sh4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_cvtf_hs4 (__v850_v4si)}
+Generates the @code{cvtf.hs4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_cmpf_s4 (__v850_v4sf, __v850_v4sf, int)}
+Generates the @code{cmpf.s4} instruction, with an immediate operand from
+0 to 15.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_cmovf_w4 (__v850_v4si, __v850_v4sf, __v850_v4sf)}
+Generates the @code{cmovf.w4} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_cmovf_w4i (__v850_v4si, __v850_v4si, __v850_v4si)}
+Generates the @code{cmovf.w4} instruction on integer vectors.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_shflv_w4 (__v850_v4sf, __v850_v4sf, int)}
+Generates the @code{shflv.w4} instruction, with an immediate operand
+from 0 to 4095.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_shflv_w4i (__v850_v4si, __v850_v4si, int)}
+Generates the @code{shflv.w4} instruction on integer vectors, with an
+immediate operand from 0 to 4095.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_flpv_s4 (__v850_v4sf, int)}
+Generates the @code{flpv.s4} instruction, with an immediate operand from
+0 to 3.
+@enddefbuiltin
+
+@defbuiltin{int __builtin_v850_trfsrv_w4 (__v850_v4si, int)}
+Generates the @code{trfsrv.w4} instruction, with an immediate operand
+from 0 to 5.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_ldv_w (__v850_v4sf, const void *, int)}
+Loads with the @code{ldv.w} instruction, with an immediate operand from
+0 to 15.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_ldv_dw (__v850_v4sf, const void *, int)}
+Loads with the @code{ldv.dw} instruction, with an immediate operand from
+0 to 3.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4sf __builtin_v850_ldv_qw (const void *)}
+Loads with the @code{ldv.qw} instruction.
+@enddefbuiltin
+
+@defbuiltin{__v850_v4si __builtin_v850_ldvz_h4 (const void *)}
+Loads with the @code{ldvz.h4} instruction.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_v850_stv_w (void *, __v850_v4sf, int)}
+Stores with the @code{stv.w} instruction, with an immediate operand from
+0 to 3.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_v850_stv_dw (void *, __v850_v4sf, int)}
+Stores with the @code{stv.dw} instruction, with an immediate operand
+from 0 to 1.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_v850_stv_qw (void *, __v850_v4sf)}
+Stores with the @code{stv.qw} instruction.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_v850_stvz_h4 (void *, __v850_v4si)}
+Stores with the @code{stvz.h4} instruction.
+@enddefbuiltin
 @node RISC-V Built-in Functions
 @subsection RISC-V Built-in Functions
 
