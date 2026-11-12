@@ -35,6 +35,15 @@ extern rtx    v850_return_addr              (int);
 extern bool v850_fxu_mem_p (rtx, int, bool);
 extern bool v850_expand_fxu_move (rtx, rtx);
 extern void v850_expand_fxu_misaligned_move (rtx, rtx);
+extern int v850_fxu_fcond (enum rtx_code, bool *, bool *);
+extern void v850_expand_fxu_vec_cmp (rtx, enum rtx_code, rtx, rtx);
+extern void v850_expand_fxu_vcond (rtx, rtx, rtx, enum rtx_code, rtx,
+				   rtx);
+extern void v850_expand_fxu_dup (rtx, rtx);
+extern void v850_expand_fxu_extract (rtx, rtx, int);
+extern void v850_expand_fxu_set (rtx, rtx, int);
+extern void v850_expand_fxu_init (rtx, rtx);
+extern void v850_expand_fxu_reduc (rtx, rtx, int);
 extern const char *output_move_single       (rtx *);
 extern char * construct_save_jarl           (rtx);
 extern char * construct_restore_jr          (rtx);

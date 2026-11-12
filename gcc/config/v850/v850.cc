@@ -49,6 +49,11 @@
 #include "langhooks.h"
 #include "cfgrtl.h"
 #include "builtins.h"
+#include "fold-const.h"
+#include "gimple.h"
+#include "gimple-iterator.h"
+#include "cfgloop.h"
+#include "tree-vectorizer.h"
 
 /* This file should be included last.  */
 #include "target-def.h"
@@ -3736,6 +3741,15 @@ v850_vector_mode_supported_p (machine_mode mode)
   return TARGET_FXU && (mode == V4SFmode || mode == V4SImode);
 }
 
+/* Implement TARGET_VECTORIZE_PREFERRED_SIMD_MODE.  */
+
+static machine_mode
+v850_preferred_simd_mode (scalar_mode mode)
+{
+  return (TARGET_FXU && mode == SFmode && ! flag_rounding_math
+	  ? V4SFmode : word_mode);
+}
+
 /* Implement TARGET_SECONDARY_MEMORY_NEEDED.  */
 
 static bool
@@ -3882,6 +3896,340 @@ v850_expand_fxu_move (rtx dst, rtx src)
   if (MEM_P (dst))
     dst = v850_fxu_legitimize_mem (dst, 16);
   emit_insn (gen_rtx_SET (dst, src));
+  return true;
+}
+
+/* Return the exact CMPF.S4 fcond for CODE (swap, invert), or -1.  */
+
+int
+v850_fxu_fcond (enum rtx_code code, bool *swap, bool *invert)
+{
+  bool s = false, i = false;
+  int fc;
+
+  if (HONOR_SNANS (SFmode))
+    return -1;
+  switch (code)
+    {
+    case EQ: fc = 2; break;
+    case NE: fc = 2; i = true; break;
+    case UNORDERED: fc = 1; break;
+    case ORDERED: fc = 1; i = true; break;
+    case UNEQ: fc = 3; break;
+    case UNLT: fc = 5; break;
+    case UNLE: fc = 7; break;
+    case UNGT: fc = 5; s = true; break;
+    case UNGE: fc = 7; s = true; break;
+    case LT: fc = 4; break;
+    case LE: fc = 6; break;
+    case GT: fc = 4; s = true; break;
+    case GE: fc = 6; s = true; break;
+    case LTGT: fc = 3; i = true; break;
+    default: return -1;
+    }
+  if (flag_trapping_math
+      && (code == LT || code == LE || code == GT || code == GE
+	  || code == LTGT))
+    return -1;
+  if (swap)
+    *swap = s;
+  if (invert)
+    *invert = i;
+  return fc;
+}
+
+/* Emit CMPF.S4 for A CODE B; *INVERT is set if it holds the inverse.  */
+
+static rtx
+v850_emit_fxu_cmpf (enum rtx_code code, rtx a, rtx b, bool *invert)
+{
+  bool swap;
+  int fc = v850_fxu_fcond (code, &swap, invert);
+  rtx dst = gen_reg_rtx (V4SImode);
+
+  gcc_assert (fc >= 0);
+  a = force_reg (V4SFmode, a);
+  b = force_reg (V4SFmode, b);
+  if (swap)
+    std::swap (a, b);
+  emit_insn (gen_fxu_cmpf (dst, a, b, GEN_INT (fc)));
+  return dst;
+}
+
+/* Expand vec_cmp: DST = A CODE B.  */
+
+void
+v850_expand_fxu_vec_cmp (rtx dst, enum rtx_code code, rtx a, rtx b)
+{
+  bool invert;
+  rtx m = v850_emit_fxu_cmpf (code, a, b, &invert);
+
+  if (invert)
+    emit_insn (gen_fxu_cmovf (V4SImode, dst, m,
+			      force_reg (V4SImode, CONST0_RTX (V4SImode)),
+			      force_reg (V4SImode, CONSTM1_RTX (V4SImode))));
+  else
+    emit_move_insn (dst, m);
+}
+
+/* Expand vcond: DST = A CODE B ? T : F.  */
+
+void
+v850_expand_fxu_vcond (rtx dst, rtx t, rtx f, enum rtx_code code, rtx a,
+		       rtx b)
+{
+  machine_mode mode = GET_MODE (dst);
+  bool invert;
+  rtx m = v850_emit_fxu_cmpf (code, a, b, &invert);
+
+  if (invert)
+    std::swap (t, f);
+  emit_insn (gen_fxu_cmovf (mode, dst, m, force_reg (mode, t),
+			    force_reg (mode, f)));
+}
+
+/* Return a 4-aligned SImode MEM that holds the scalar X.  */
+
+static rtx
+v850_fxu_scalar_mem (rtx x)
+{
+  machine_mode mode = GET_MODE (x) == VOIDmode ? SImode : GET_MODE (x);
+
+  if (! MEM_P (x) || MEM_ALIGN (x) < 32 || MEM_VOLATILE_P (x))
+    {
+      rtx tmp = assign_stack_temp (mode, 4);
+      emit_move_insn (tmp, MEM_P (x) ? force_reg (mode, x) : x);
+      x = tmp;
+    }
+  return adjust_address (v850_fxu_legitimize_mem (x, 4), SImode, 0);
+}
+
+/* Expand vec_duplicate: all lanes of DST = X.  */
+
+void
+v850_expand_fxu_dup (rtx dst, rtx x)
+{
+  machine_mode mode = GET_MODE (dst);
+  rtx mem = v850_fxu_scalar_mem (x);
+
+  mem = adjust_address (mem, GET_MODE_INNER (mode), 0);
+  emit_insn (gen_fxu_ldv_w_dup (mode, dst, mem));
+}
+
+/* Expand vec_set: lane LANE of VEC = X.  */
+
+void
+v850_expand_fxu_set (rtx vec, rtx x, int lane)
+{
+  rtx mem = v850_fxu_scalar_mem (x);
+
+  emit_insn (gen_fxu_ldv_w (GET_MODE (vec), vec, vec, mem,
+			    GEN_INT (1 << lane)));
+}
+
+/* Expand vec_extract: DST = lane LANE of VEC.  */
+
+void
+v850_expand_fxu_extract (rtx dst, rtx vec, int lane)
+{
+  machine_mode mode = GET_MODE (dst);
+  bool direct = MEM_P (dst) && MEM_ALIGN (dst) >= 32 && ! MEM_VOLATILE_P (dst);
+  rtx mem = direct ? dst : assign_stack_temp (mode, 4);
+
+  mem = adjust_address (v850_fxu_legitimize_mem (mem, 4), SImode, 0);
+  emit_insn (gen_fxu_stv_w (GET_MODE (vec), mem, vec, GEN_INT (lane)));
+  if (! direct)
+    emit_move_insn (dst, adjust_address (mem, mode, 0));
+}
+
+/* Expand vec_init: DST = the elements of the PARALLEL VALS.  */
+
+void
+v850_expand_fxu_init (rtx dst, rtx vals)
+{
+  machine_mode mode = GET_MODE (dst);
+  int i, n = XVECLEN (vals, 0);
+  bool same = true, cst = true;
+
+  for (i = 0; i < n; i++)
+    {
+      rtx x = XVECEXP (vals, 0, i);
+      same &= rtx_equal_p (x, XVECEXP (vals, 0, 0));
+      cst &= CONST_INT_P (x) || CONST_DOUBLE_P (x);
+    }
+  if (cst)
+    {
+      emit_move_insn (dst, gen_rtx_CONST_VECTOR (mode, XVEC (vals, 0)));
+      return;
+    }
+  if (same)
+    {
+      v850_expand_fxu_dup (dst, XVECEXP (vals, 0, 0));
+      return;
+    }
+  rtx mem = assign_stack_temp (mode, GET_MODE_SIZE (mode));
+  for (i = 0; i < n; i++)
+    emit_move_insn (adjust_address (mem, GET_MODE_INNER (mode),
+				    i * GET_MODE_UNIT_SIZE (mode)),
+		    XVECEXP (vals, 0, i));
+  emit_move_insn (dst, mem);
+}
+
+/* Expand reduc_<CODE>_scal_v4sf: DST = CODE over the lanes of V.  */
+
+void
+v850_expand_fxu_reduc (rtx dst, rtx v, int code)
+{
+  rtx t = gen_reg_rtx (V4SFmode);
+  rtx s = gen_reg_rtx (V4SFmode);
+  rtx u = gen_reg_rtx (V4SFmode);
+
+  v = force_reg (V4SFmode, v);
+  switch (code)
+    {
+    case UNSPEC_FXU_ADDRF:
+      emit_insn (gen_fxu_addrf (t, v, v));
+      emit_insn (gen_fxu_shflv (V4SFmode, s, t, t, GEN_INT (2)));
+      emit_insn (gen_addv4sf3 (u, t, s));
+      break;
+    case SMAX:
+    case UNSPEC_FXU_FMAX:
+      emit_insn (gen_fxu_maxrf (t, v, v));
+      emit_insn (gen_fxu_shflv (V4SFmode, s, t, t, GEN_INT (2)));
+      emit_insn (code == SMAX ? gen_smaxv4sf3 (u, t, s)
+				: gen_fmaxv4sf3 (u, t, s));
+      break;
+    case SMIN:
+    case UNSPEC_FXU_FMIN:
+      emit_insn (gen_fxu_minrf (t, v, v));
+      emit_insn (gen_fxu_shflv (V4SFmode, s, t, t, GEN_INT (2)));
+      emit_insn (code == SMIN ? gen_sminv4sf3 (u, t, s)
+				: gen_fminv4sf3 (u, t, s));
+      break;
+    default:
+      gcc_unreachable ();
+    }
+  v850_expand_fxu_extract (dst, u, 0);
+}
+
+/* Implement TARGET_VECTORIZE_BUILTIN_VECTORIZATION_COST.  */
+
+static int
+v850_builtin_vectorization_cost (enum vect_cost_for_stmt kind, tree vectype,
+				 int misalign)
+{
+  if (vectype && TYPE_MODE (vectype) != V4SFmode
+      && TYPE_MODE (vectype) != V4SImode)
+    return default_builtin_vectorization_cost (kind, vectype, misalign);
+  switch (kind)
+    {
+    case vector_stmt:
+    case vec_promote_demote:
+    case unaligned_load:
+    case unaligned_store:
+    case vec_to_scalar:
+    case scalar_to_vec:
+      return 2;
+    case vec_construct:
+      return TYPE_VECTOR_SUBPARTS (vectype).to_constant () + 1;
+    case cond_branch_taken:
+      return 3;
+    default:
+      return 1;
+    }
+}
+
+class v850_vector_costs : public vector_costs
+{
+public:
+  using vector_costs::vector_costs;
+
+  unsigned int add_stmt_cost (int count, vect_cost_for_stmt kind,
+			      stmt_vec_info stmt_info, slp_tree node,
+			      tree vectype, int misalign,
+			      vect_cost_model_location where) override;
+  void finish_cost (const vector_costs *scalar_costs) override;
+
+private:
+  unsigned int m_wr = 0;
+};
+
+unsigned int
+v850_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
+				  stmt_vec_info stmt_info, slp_tree node,
+				  tree vectype, int misalign,
+				  vect_cost_model_location where)
+{
+  unsigned int cost;
+
+  if (m_vinfo->vector_mode != V4SFmode && m_vinfo->vector_mode != V4SImode)
+    return vector_costs::add_stmt_cost (count, kind, stmt_info, node, vectype,
+					misalign, where);
+  cost = v850_builtin_vectorization_cost (kind, vectype, misalign) * count;
+
+  if (! m_costing_for_scalar && where == vect_body
+      && (kind == vector_load || kind == unaligned_load
+	  || kind == vec_construct || kind == scalar_to_vec))
+    m_wr += count;
+  return record_stmt_cost (stmt_info, where, cost);
+}
+
+/* Add the loop control of a loop that is not unrolled completely, and
+   the save, restore and realignment for the callee-saved wr registers.  */
+
+void
+v850_vector_costs::finish_cost (const vector_costs *scalar_costs)
+{
+  loop_vec_info loop_vinfo = dyn_cast<loop_vec_info> (m_vinfo);
+
+  if (m_vinfo->vector_mode != V4SFmode && m_vinfo->vector_mode != V4SImode)
+    {
+      vector_costs::finish_cost (scalar_costs);
+      return;
+    }
+  if (loop_vinfo
+      && ! (LOOP_VINFO_NITERS_KNOWN_P (loop_vinfo)
+	    && LOOP_VINFO_INT_NITERS (loop_vinfo) <= 16))
+    m_costs[vect_body] += 3;
+  if (! m_costing_for_scalar)
+    {
+      unsigned int n = MIN (MAX (m_wr, 2U), 32U);
+      m_costs[vect_prologue] += n + 6;
+      m_costs[vect_epilogue] += n + 3;
+    }
+  vector_costs::finish_cost (scalar_costs);
+}
+
+/* Implement TARGET_VECTORIZE_CREATE_COSTS.  */
+
+static vector_costs *
+v850_vectorize_create_costs (vec_info *vinfo, bool costing_for_scalar)
+{
+  return new v850_vector_costs (vinfo, costing_for_scalar);
+}
+
+/* Implement TARGET_VECTORIZE_VEC_PERM_CONST with SHFLV.W4.  */
+
+static bool
+v850_vectorize_vec_perm_const (machine_mode mode, machine_mode op_mode,
+			       rtx target, rtx op0, rtx op1,
+			       const vec_perm_indices &sel)
+{
+  unsigned int i, imm = 0;
+
+  if (! TARGET_FXU || mode != op_mode
+      || (mode != V4SFmode && mode != V4SImode))
+    return false;
+  if (! target)
+    return true;
+  for (i = 0; i < 4; i++)
+    imm |= (sel[i].to_constant () & 7) << (3 * i);
+  op0 = force_reg (mode, op0);
+  op1 = op1 == NULL_RTX ? op0 : force_reg (mode, op1);
+  rtx dst = register_operand (target, mode) ? target : gen_reg_rtx (mode);
+  emit_insn (gen_fxu_shflv (mode, dst, op0, op1, GEN_INT (imm)));
+  if (dst != target)
+    emit_move_insn (target, dst);
   return true;
 }
 
@@ -4360,6 +4708,19 @@ v850_expand_builtin (tree exp, rtx target, rtx, machine_mode, int)
 
 #undef  TARGET_CAN_CHANGE_MODE_CLASS
 #define TARGET_CAN_CHANGE_MODE_CLASS v850_can_change_mode_class
+
+#undef  TARGET_VECTORIZE_PREFERRED_SIMD_MODE
+#define TARGET_VECTORIZE_PREFERRED_SIMD_MODE v850_preferred_simd_mode
+
+#undef  TARGET_VECTORIZE_BUILTIN_VECTORIZATION_COST
+#define TARGET_VECTORIZE_BUILTIN_VECTORIZATION_COST \
+  v850_builtin_vectorization_cost
+
+#undef  TARGET_VECTORIZE_CREATE_COSTS
+#define TARGET_VECTORIZE_CREATE_COSTS v850_vectorize_create_costs
+
+#undef  TARGET_VECTORIZE_VEC_PERM_CONST
+#define TARGET_VECTORIZE_VEC_PERM_CONST v850_vectorize_vec_perm_const
 
 #undef  TARGET_VECTOR_MODE_SUPPORTED_P
 #define TARGET_VECTOR_MODE_SUPPORTED_P v850_vector_mode_supported_p

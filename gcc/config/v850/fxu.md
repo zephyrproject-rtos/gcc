@@ -58,6 +58,8 @@
   UNSPEC_FXU_SHFLV
   UNSPEC_FXU_FLPV
   UNSPEC_FXU_TRFSRV
+  UNSPEC_FXU_FMAX
+  UNSPEC_FXU_FMIN
 ])
 
 (define_int_iterator FXU_BINOP [UNSPEC_FXU_ADDSUBF UNSPEC_FXU_ADDSUBNF
@@ -134,6 +136,10 @@
 			   (UNSPEC_FXU_CVTF_SH4 "cvtf_sh4")])
 
 (define_mode_iterator VFXU [V4SF V4SI])
+
+(define_mode_attr fxu_unit [(V4SF "SF") (V4SI "SI")])
+
+(define_mode_attr fxu_unit_l [(V4SF "sf") (V4SI "si")])
 
 (define_expand "mov<mode>"
   [(set (match_operand:VFXU 0 "nonimmediate_operand")
@@ -301,6 +307,53 @@
   "fnmsf.s4 %2, %1, %0"
   [(set_attr "type" "fpu")])
 
+(define_int_iterator FXU_FMINMAX [UNSPEC_FXU_FMAX UNSPEC_FXU_FMIN])
+
+(define_int_attr fxu_fminmax_name [(UNSPEC_FXU_FMAX "fmax")
+				   (UNSPEC_FXU_FMIN "fmin")])
+
+(define_int_attr fxu_fminmax_insn [(UNSPEC_FXU_FMAX "maxf.s4")
+				   (UNSPEC_FXU_FMIN "minf.s4")])
+
+(define_insn "<fxu_fminmax_name>v4sf3"
+  [(set (match_operand:V4SF 0 "register_operand" "=w")
+	(unspec:V4SF [(match_operand:V4SF 1 "register_operand" "w")
+		      (match_operand:V4SF 2 "register_operand" "w")]
+		     FXU_FMINMAX))]
+  "TARGET_FXU"
+  "<fxu_fminmax_insn> %2, %1, %0"
+  [(set_attr "type" "fpu")])
+
+(define_expand "vec_addsubv4sf3"
+  [(match_operand:V4SF 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")
+   (match_operand:V4SF 2 "register_operand")]
+  "TARGET_FXU"
+{
+  emit_insn (gen_fxu_addsubf (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_expand "cadd90v4sf3"
+  [(match_operand:V4SF 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")
+   (match_operand:V4SF 2 "register_operand")]
+  "TARGET_FXU"
+{
+  emit_insn (gen_fxu_addsubxf (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_expand "cadd270v4sf3"
+  [(match_operand:V4SF 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")
+   (match_operand:V4SF 2 "register_operand")]
+  "TARGET_FXU"
+{
+  emit_insn (gen_fxu_subaddxf (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
 (define_insn "fxu_<fxu_name>"
   [(set (match_operand:V4SF 0 "register_operand" "=w")
 	(unspec:V4SF [(match_operand:V4SF 1 "register_operand" "w")
@@ -354,6 +407,24 @@
   "<fxu_insn> %1, %0"
   [(set_attr "type" "fpu")])
 
+(define_expand "lfloorv4sfv4si2"
+  [(match_operand:V4SI 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")]
+  "TARGET_FXU"
+{
+  emit_insn (gen_fxu_floorf_sw4 (operands[0], operands[1]));
+  DONE;
+})
+
+(define_expand "lceilv4sfv4si2"
+  [(match_operand:V4SI 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")]
+  "TARGET_FXU"
+{
+  emit_insn (gen_fxu_ceilf_sw4 (operands[0], operands[1]));
+  DONE;
+})
+
 (define_insn "fxu_cvtf_hs4"
   [(set (match_operand:V4SF 0 "register_operand" "=w")
 	(unspec:V4SF [(match_operand:V4SI 1 "register_operand" "w")]
@@ -382,6 +453,46 @@
   "cmovf.w4 %1, %2, %3, %0"
   [(set_attr "length" "6")
    (set_attr "type" "fpu")])
+
+(define_expand "vec_cmpv4sfv4si"
+  [(set (match_operand:V4SI 0 "register_operand")
+	(match_operator:V4SI 1 "v850_fxu_comparison_operator"
+	  [(match_operand:V4SF 2 "register_operand")
+	   (match_operand:V4SF 3 "register_operand")]))]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_vec_cmp (operands[0], GET_CODE (operands[1]),
+			   operands[2], operands[3]);
+  DONE;
+})
+
+(define_expand "vcond_mask_<mode>v4si"
+  [(set (match_operand:VFXU 0 "register_operand")
+	(if_then_else:VFXU
+	  (match_operand:V4SI 3 "register_operand")
+	  (match_operand:VFXU 1 "register_operand")
+	  (match_operand:VFXU 2 "register_operand")))]
+  "TARGET_FXU"
+{
+  emit_insn (gen_fxu_cmovf (<MODE>mode, operands[0], operands[3],
+			    operands[1], operands[2]));
+  DONE;
+})
+
+(define_expand "vcond<mode>v4sf"
+  [(set (match_operand:VFXU 0 "register_operand")
+	(if_then_else:VFXU
+	  (match_operator 3 "v850_fxu_comparison_operator"
+	    [(match_operand:V4SF 4 "register_operand")
+	     (match_operand:V4SF 5 "register_operand")])
+	  (match_operand:VFXU 1 "register_operand")
+	  (match_operand:VFXU 2 "register_operand")))]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_vcond (operands[0], operands[1], operands[2],
+			 GET_CODE (operands[3]), operands[4], operands[5]);
+  DONE;
+})
 
 (define_insn "@fxu_shflv<mode>"
   [(set (match_operand:VFXU 0 "register_operand" "=w")
@@ -424,6 +535,53 @@
   [(set_attr "length" "6")
    (set_attr "type" "load")])
 
+(define_insn "@fxu_ldv_w_dup<mode>"
+  [(set (match_operand:VFXU 0 "register_operand" "=w")
+	(vec_duplicate:VFXU
+	  (match_operand:<fxu_unit> 1 "memory_operand" "Yw")))]
+  "TARGET_FXU"
+  "ldv.w 15, %1, %0"
+  [(set_attr "length" "6")
+   (set_attr "type" "load")])
+
+(define_expand "vec_duplicate<mode>"
+  [(set (match_operand:VFXU 0 "register_operand")
+	(vec_duplicate:VFXU (match_operand:<fxu_unit> 1 "general_operand")))]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_dup (operands[0], operands[1]);
+  DONE;
+})
+
+(define_expand "vec_extract<mode><fxu_unit_l>"
+  [(match_operand:<fxu_unit> 0 "nonimmediate_operand")
+   (match_operand:VFXU 1 "register_operand")
+   (match_operand:SI 2 "const_int_operand")]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_extract (operands[0], operands[1], INTVAL (operands[2]));
+  DONE;
+})
+
+(define_expand "vec_set<mode>"
+  [(match_operand:VFXU 0 "register_operand")
+   (match_operand:<fxu_unit> 1 "general_operand")
+   (match_operand:SI 2 "const_int_operand")]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_set (operands[0], operands[1], INTVAL (operands[2]));
+  DONE;
+})
+
+(define_expand "vec_init<mode><fxu_unit_l>"
+  [(match_operand:VFXU 0 "register_operand")
+   (match_operand 1 "")]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_init (operands[0], operands[1]);
+  DONE;
+})
+
 (define_insn "@fxu_stv_w<mode>"
   [(set (match_operand:SI 0 "memory_operand" "=Yw")
 	(unspec:SI [(match_operand:VFXU 1 "register_operand" "w")
@@ -451,3 +609,48 @@
   "stvz.h4 %1, %0"
   [(set_attr "length" "6")
    (set_attr "type" "store")])
+
+(define_expand "reduc_plus_scal_v4sf"
+  [(match_operand:SF 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_reduc (operands[0], operands[1], UNSPEC_FXU_ADDRF);
+  DONE;
+})
+
+(define_expand "reduc_smax_scal_v4sf"
+  [(match_operand:SF 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_reduc (operands[0], operands[1], SMAX);
+  DONE;
+})
+
+(define_expand "reduc_smin_scal_v4sf"
+  [(match_operand:SF 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_reduc (operands[0], operands[1], SMIN);
+  DONE;
+})
+
+(define_expand "reduc_fmax_scal_v4sf"
+  [(match_operand:SF 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_reduc (operands[0], operands[1], UNSPEC_FXU_FMAX);
+  DONE;
+})
+
+(define_expand "reduc_fmin_scal_v4sf"
+  [(match_operand:SF 0 "register_operand")
+   (match_operand:V4SF 1 "register_operand")]
+  "TARGET_FXU"
+{
+  v850_expand_fxu_reduc (operands[0], operands[1], UNSPEC_FXU_FMIN);
+  DONE;
+})
