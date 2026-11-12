@@ -540,6 +540,8 @@ struct cum_arg { int nbytes; };
 
 #define TRAMPOLINE_SIZE 24
 
+#define TRAMPOLINE_ALIGNMENT 32
+
 /* Addressing modes, and classification of registers for them.  */
 
 
