@@ -2556,9 +2556,7 @@ v850_insert_attributes (tree decl, tree * attr_ptr ATTRIBUTE_UNUSED )
     }
   
   if (current_function_decl == NULL_TREE
-      && (VAR_P (decl)
-	  || TREE_CODE (decl) == CONST_DECL
-	  || TREE_CODE (decl) == FUNCTION_DECL)
+      && (VAR_P (decl) || TREE_CODE (decl) == FUNCTION_DECL)
       && (!DECL_EXTERNAL (decl) || DECL_INITIAL (decl))
       && !DECL_SECTION_NAME (decl))
     {
