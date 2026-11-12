@@ -3236,6 +3236,15 @@ v850_option_override (void)
   if (! TARGET_GCC_ABI && small_memory_max[(int) SMALL_MEMORY_TDA] > 0)
     error ("%<-mtda%> is not supported with the RH850 ABI; use %<-mgcc-abi%>");
 
+  if (TARGET_G4MH2)
+    {
+      target_flags |= MASK_G4;
+      if (global_options_set.x_target_flags & MASK_NO_STRICT_ALIGN
+	  && TARGET_NO_STRICT_ALIGN)
+	error ("%<-mno-strict-align%> is not supported with %<-mg4mh2%>");
+      target_flags &= ~MASK_NO_STRICT_ALIGN;
+    }
+
   if (TARGET_G4 && ! TARGET_V850E3V5)
     {
       if (target_flags & MASK_CPU)

@@ -1419,6 +1419,7 @@ See RS/6000 and PowerPC Options.
 -mv850e  -mv850  -mv850e3v5
 -mloop
 -mg4
+-mg4mh2
 -mrelax
 -mlong-jumps
 -msoft-float
@@ -34059,6 +34060,15 @@ Enables the instructions of the RH850 G4 cores (G4KH, G4MH) on top of
 the v850e3v5 architecture, and passes @option{-mg4} to the assembler.
 It implies @option{-mv850e3v5}.  The preprocessor constant
 @code{__V850_G4__} is defined if this option is used.
+
+@opindex mg4mh2
+@item -mg4mh2
+Enables the instructions of the RH850 G4MH2 core on top of
+@option{-mg4}, and passes @option{-mg4mh2} to the assembler.  It implies
+@option{-mg4}.  The preprocessor constant @code{__V850_G4MH2__} is
+defined if this option is used.  The G4MH2 core raises an exception on a
+misaligned access, so this option also enforces strict alignment and
+rejects @option{-mno-strict-align}.
 
 @opindex mrh850-abi
 @opindex mghs

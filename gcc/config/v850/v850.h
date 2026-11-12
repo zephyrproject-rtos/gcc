@@ -111,9 +111,12 @@
 %{msoft-float:-msoft-float} \
 %{mhard-float:-mhard-float} \
 %{mgcc-abi:-mgcc-abi} \
-%{mg4:-mg4}"
+%{mg4:-mg4} \
+%{mg4mh2:-mg4mh2}"
 
-#define DRIVER_SELF_SPECS "%{mg4:%{!mv*:-mv850e3v5}}"
+#define DRIVER_SELF_SPECS \
+  "%{mg4mh2:%{!mg4:-mg4}}", \
+  "%{mg4:%{!mv*:-mv850e3v5}}"
 
 #define LINK_SPEC "%{mgcc-abi:-m v850}"
 
@@ -156,6 +159,8 @@
 	builtin_define ("__V850_8BYTE_ALIGN__");\
       if (TARGET_G4)				\
 	builtin_define ("__V850_G4__");		\
+      if (TARGET_G4MH2)				\
+	builtin_define ("__V850_G4MH2__");	\
       builtin_define (TARGET_USE_FPU ?		\
 		      "__FPU_OK__" : "__NO_FPU__");\
     }						\
