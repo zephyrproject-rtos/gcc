@@ -216,3 +216,207 @@
   "TARGET_V850E3V5_UP"
   "1:\;ldl.w [%0],%2\;mov %1,%2\;stc.w %2,[%0]\;cmp r0,%2\;be 1b"
   [(set_attr "length" "14")])
+
+(define_mode_iterator SUBW [QI HI])
+(define_mode_attr ldl_sfx [(QI "bu") (HI "hu")])
+(define_mode_attr stc_sfx [(QI "b") (HI "h")])
+
+(define_expand "atomic_compare_and_swap<mode>"
+  [(match_operand:SI 0 "register_operand")
+   (match_operand:SUBW 1 "register_operand")
+   (match_operand:SUBW 2 "memory_operand")
+   (match_operand:SUBW 3 "register_operand")
+   (match_operand:SUBW 4 "register_operand")
+   (match_operand:SI 5 "const_int_operand")
+   (match_operand:SI 6 "const_int_operand")
+   (match_operand:SI 7 "const_int_operand")]
+  "TARGET_G4"
+{
+  rtx addr = force_reg (Pmode, XEXP (operands[2], 0));
+  rtx expected = force_reg (SImode, convert_to_mode (SImode, operands[3], 1));
+  rtx desired = force_reg (SImode, convert_to_mode (SImode, operands[4], 1));
+  rtx old = gen_reg_rtx (SImode);
+
+  v850_atomic_fence (operands[6], true);
+  emit_insn (gen_atomic_cas_value_strong<mode> (old, addr, expected, desired));
+  v850_atomic_fence (operands[6], false);
+  emit_move_insn (operands[1], gen_lowpart (<MODE>mode, old));
+  emit_insn (gen_cstoresi4 (operands[0],
+			    gen_rtx_EQ (SImode, old, expected),
+			    old, expected));
+  DONE;
+})
+
+(define_insn "atomic_cas_value_strong<mode>"
+  [(set (match_operand:SI 0 "register_operand" "=&r")
+	(zero_extend:SI (mem:SUBW (match_operand:SI 1 "register_operand" "r"))))
+   (set (mem:SUBW (match_dup 1))
+	(unspec_volatile:SUBW [(match_operand:SI 2 "register_operand" "r")
+			       (match_operand:SI 3 "register_operand" "r")]
+	 UNSPECV_ATOMIC_CAS))
+   (clobber (match_scratch:SI 4 "=&r"))
+   (clobber (reg:CC CC_REGNUM))]
+  "TARGET_G4"
+{
+  return "1:\;"
+	 "ldl.<ldl_sfx> [%1],%0\;"
+	 "cmp %2,%0\;"
+	 "bne 2f\;"
+	 "mov %3,%4\;"
+	 "stc.<stc_sfx> %4,[%1]\;"
+	 "cmp r0,%4\;"
+	 "be 1b\;"
+	 "2:";
+}
+  [(set_attr "length" "18")])
+
+(define_expand "atomic_exchange<mode>"
+  [(match_operand:SUBW 0 "register_operand")
+   (match_operand:SUBW 1 "memory_operand")
+   (match_operand:SUBW 2 "register_operand")
+   (match_operand:SI 3 "const_int_operand")]
+  "TARGET_G4"
+{
+  rtx addr = force_reg (Pmode, XEXP (operands[1], 0));
+  rtx value = force_reg (SImode, convert_to_mode (SImode, operands[2], 1));
+  rtx old = gen_reg_rtx (SImode);
+
+  v850_atomic_fence (operands[3], true);
+  emit_insn (gen_atomic_exchange<mode>_insn (old, addr, value));
+  v850_atomic_fence (operands[3], false);
+  emit_move_insn (operands[0], gen_lowpart (<MODE>mode, old));
+  DONE;
+})
+
+(define_insn "atomic_exchange<mode>_insn"
+  [(set (match_operand:SI 0 "register_operand" "=&r")
+	(zero_extend:SI (mem:SUBW (match_operand:SI 1 "register_operand" "r"))))
+   (set (mem:SUBW (match_dup 1))
+	(unspec_volatile:SUBW [(match_operand:SI 2 "register_operand" "r")]
+	 UNSPECV_ATOMIC_EXCHANGE))
+   (clobber (match_scratch:SI 3 "=&r"))
+   (clobber (reg:CC CC_REGNUM))]
+  "TARGET_G4"
+{
+  return "1:\;"
+	 "ldl.<ldl_sfx> [%1],%0\;"
+	 "mov %2,%3\;"
+	 "stc.<stc_sfx> %3,[%1]\;"
+	 "cmp r0,%3\;"
+	 "be 1b";
+}
+  [(set_attr "length" "14")])
+
+(define_expand "atomic_fetch_<atomic_optab><mode>"
+  [(match_operand:SUBW 0 "register_operand")
+   (any_atomic:SUBW (match_operand:SUBW 1 "memory_operand")
+		    (match_operand:SUBW 2 "register_operand"))
+   (match_operand:SI 3 "const_int_operand")]
+  "TARGET_G4"
+{
+  rtx addr = force_reg (Pmode, XEXP (operands[1], 0));
+  rtx value = force_reg (SImode, convert_to_mode (SImode, operands[2], 1));
+  rtx old = gen_reg_rtx (SImode);
+
+  v850_atomic_fence (operands[3], true);
+  emit_insn (gen_atomic_fetch_<atomic_optab><mode>_insn (old, addr, value));
+  v850_atomic_fence (operands[3], false);
+  emit_move_insn (operands[0], gen_lowpart (<MODE>mode, old));
+  DONE;
+})
+
+(define_insn "atomic_fetch_<atomic_optab><mode>_insn"
+  [(set (match_operand:SI 0 "register_operand" "=&r")
+	(zero_extend:SI (mem:SUBW (match_operand:SI 1 "register_operand" "r"))))
+   (set (mem:SUBW (match_dup 1))
+	(unspec_volatile:SUBW
+	  [(any_atomic:SI (zero_extend:SI (mem:SUBW (match_dup 1)))
+			  (match_operand:SI 2 "register_operand" "r"))]
+	 UNSPECV_ATOMIC_OP))
+   (clobber (match_scratch:SI 3 "=&r"))
+   (clobber (reg:CC CC_REGNUM))]
+  "TARGET_G4"
+{
+  return "1:\;"
+	 "ldl.<ldl_sfx> [%1],%0\;"
+	 "mov %0,%3\;"
+	 "<atomic_optab> %2,%3\;"
+	 "stc.<stc_sfx> %3,[%1]\;"
+	 "cmp r0,%3\;"
+	 "be 1b";
+}
+  [(set_attr "length" "16")])
+
+(define_expand "atomic_fetch_nand<mode>"
+  [(match_operand:SUBW 0 "register_operand")
+   (match_operand:SUBW 1 "memory_operand")
+   (match_operand:SUBW 2 "register_operand")
+   (match_operand:SI 3 "const_int_operand")]
+  "TARGET_G4"
+{
+  rtx addr = force_reg (Pmode, XEXP (operands[1], 0));
+  rtx value = force_reg (SImode, convert_to_mode (SImode, operands[2], 1));
+  rtx old = gen_reg_rtx (SImode);
+
+  v850_atomic_fence (operands[3], true);
+  emit_insn (gen_atomic_fetch_nand<mode>_insn (old, addr, value));
+  v850_atomic_fence (operands[3], false);
+  emit_move_insn (operands[0], gen_lowpart (<MODE>mode, old));
+  DONE;
+})
+
+(define_insn "atomic_fetch_nand<mode>_insn"
+  [(set (match_operand:SI 0 "register_operand" "=&r")
+	(zero_extend:SI (mem:SUBW (match_operand:SI 1 "register_operand" "r"))))
+   (set (mem:SUBW (match_dup 1))
+	(unspec_volatile:SUBW
+	  [(not:SI (and:SI (zero_extend:SI (mem:SUBW (match_dup 1)))
+			   (match_operand:SI 2 "register_operand" "r")))]
+	 UNSPECV_ATOMIC_OP))
+   (clobber (match_scratch:SI 3 "=&r"))
+   (clobber (reg:CC CC_REGNUM))]
+  "TARGET_G4"
+{
+  return "1:\;"
+	 "ldl.<ldl_sfx> [%1],%0\;"
+	 "mov %0,%3\;"
+	 "and %2,%3\;"
+	 "not %3,%3\;"
+	 "stc.<stc_sfx> %3,[%1]\;"
+	 "cmp r0,%3\;"
+	 "be 1b";
+}
+  [(set_attr "length" "18")])
+
+(define_expand "atomic_store<mode>"
+  [(match_operand:SUBW 0 "memory_operand")
+   (match_operand:SUBW 1 "register_operand")
+   (match_operand:SI 2 "const_int_operand")]
+  "TARGET_G4"
+{
+  rtx addr = force_reg (Pmode, XEXP (operands[0], 0));
+  rtx value = force_reg (SImode, convert_to_mode (SImode, operands[1], 1));
+
+  v850_atomic_fence (operands[2], true);
+  emit_insn (gen_atomic_store<mode>_insn (addr, value));
+  if (is_mm_seq_cst (memmodel_base (INTVAL (operands[2]))))
+    v850_atomic_fence (operands[2], false);
+  DONE;
+})
+
+(define_insn "atomic_store<mode>_insn"
+  [(set (mem:SUBW (match_operand:SI 0 "register_operand" "r"))
+	(unspec_volatile:SUBW [(match_operand:SI 1 "register_operand" "r")]
+	 UNSPECV_ATOMIC_STORE))
+   (clobber (match_scratch:SI 2 "=&r"))
+   (clobber (reg:CC CC_REGNUM))]
+  "TARGET_G4"
+{
+  return "1:\;"
+	 "ldl.<ldl_sfx> [%0],%2\;"
+	 "mov %1,%2\;"
+	 "stc.<stc_sfx> %2,[%0]\;"
+	 "cmp r0,%2\;"
+	 "be 1b";
+}
+  [(set_attr "length" "14")])
