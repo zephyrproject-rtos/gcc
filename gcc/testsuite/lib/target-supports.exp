@@ -12576,6 +12576,26 @@ proc check_effective_target_v850_fxu { } {
     }]
 }
 
+
+proc check_effective_target_v850_fxu_hw { } {
+    if { ![istarget v850*-*-*] } {
+	return 0
+    }
+    return [check_runtime v850_fxu_hw {
+	typedef float vf __attribute__ ((vector_size (16)));
+	float x[4] __attribute__ ((aligned (16))) = { 1, 2, 3, 4 };
+	int
+	main (void)
+	{
+	  vf v;
+	  __asm__ volatile ("ldv.qw 0[%1], %0" : "=w" (v) : "r" (x));
+	  __asm__ volatile ("stv.w 3, %0, 0[%1]" : : "w" (v), "r" (x)
+			    : "memory");
+	  return x[0] != 4;
+	}
+    } ""]
+}
+
 # Same as above but for the z14 vector enhancement facility. Test
 # is performed with the vector nand instruction.
 proc check_effective_target_s390_vxe { } {

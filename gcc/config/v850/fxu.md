@@ -56,6 +56,35 @@
   [(set_attr "length" "4,6,6")
    (set_attr "type" "fpu,load,store")])
 
+(define_insn "fxu_realign_sp"
+  [(set (reg:SI SP_REGNUM)
+	(and:SI (reg:SI SP_REGNUM)
+		(match_operand:SI 0 "const_int_operand" "n")))
+   (clobber (reg:SI 12))
+   (clobber (reg:CC CC_REGNUM))]
+  "reload_completed"
+{
+  if (CONST_OK_FOR_J (INTVAL (operands[0])))
+    return "mov %0,r12 ; and r12,sp";
+  if (CONST_OK_FOR_K (INTVAL (operands[0])))
+    return "movea %0,r0,r12 ; and r12,sp";
+  return "mov %0,r12 ; and r12,sp";
+}
+  [(set (attr "length")
+	(cond [(match_test "CONST_OK_FOR_J (INTVAL (operands[0]))")
+	       (const_int 4)
+	       (match_test "CONST_OK_FOR_K (INTVAL (operands[0]))")
+	       (const_int 6)]
+	      (const_int 8)))])
+
+(define_insn "fxu_restore_sp"
+  [(set (reg:SI SP_REGNUM)
+	(match_operand:SI 0 "register_operand" "r"))
+   (clobber (mem:BLK (scratch)))]
+  "reload_completed"
+  "mov %0,sp"
+  [(set_attr "length" "2")])
+
 (define_insn "@fxu_ldv_dw_both<mode>"
   [(set (match_operand:VFXU 0 "register_operand" "=w")
 	(unspec:VFXU [(match_operand:DI 1 "memory_operand" "Yd")]

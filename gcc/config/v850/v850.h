@@ -218,7 +218,14 @@
 /* No data type wants to be aligned rounder than this.  */
 #define BIGGEST_ALIGNMENT	(TARGET_FXU ? 128 : STACK_BOUNDARY)
 
-#define MAX_STACK_ALIGNMENT	(TARGET_FXU ? 128 : STACK_BOUNDARY)
+#define MAX_STACK_ALIGNMENT \
+  (TARGET_FXU ? MAX_OFILE_ALIGNMENT : STACK_BOUNDARY)
+
+#define V850_FXU_ALIGNMENT	128
+
+#define STACK_SLOT_ALIGNMENT(TYPE, MODE, ALIGN)				\
+  (TARGET_FXU && known_eq (GET_MODE_SIZE (MODE), 16)			\
+   ? MAX ((ALIGN), V850_FXU_ALIGNMENT) : (ALIGN))
 
 #define ATTRIBUTE_ALIGNED_VALUE	STACK_BOUNDARY
 
@@ -475,6 +482,8 @@ enum reg_class
 /* Register in which static-chain is passed to a function.
    This must be a call used register.  */
 #define STATIC_CHAIN_REGNUM 19
+
+#define V850_DRAP_REGNUM 11
 
 /* If defined, this macro specifies a table of register pairs used to
    eliminate unneeded registers that point into the stack frame.  If

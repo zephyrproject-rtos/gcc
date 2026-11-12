@@ -12,4 +12,10 @@ f (int n)
   t[0] = g;
   t[n - 1] = t[0];
   g = t[n / 2];
-}				/* { dg-message "sorry, unimplemented" } */
+}
+
+/* { dg-final { scan-assembler "\tmov sp,r11\n" } } */
+/* { dg-final { scan-assembler "\tmov -16,r12 ; and r12,sp\n" } } */
+/* { dg-final { scan-assembler "\tst.w r12,16\\\[r29\\\]\n" } } */
+/* { dg-final { scan-assembler "\tld.w 16\\\[r29\\\],r12\n" } } */
+/* { dg-final { scan-assembler "\tmov r12,sp\n" } } */

@@ -2537,6 +2537,10 @@ Test system has support for the CORE-V SIMD extension.
 @item v850_fxu
 Test system compiles for the RH850 FXU vector unit (@option{-mfxu}).
 
+@item v850_fxu_hw
+Test system runs code for the RH850 FXU vector unit with its default
+options.
+
 @end table
 
 @subsubsection Other hardware attributes
