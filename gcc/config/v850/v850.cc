@@ -921,6 +921,25 @@ v850_select_cc_mode (enum rtx_code cond, rtx op0, rtx op1)
   return CCmode;
 }
 
+/* Emit a SYNCM before or after an atomic access, as MODEL_RTX needs.  */
+
+void
+v850_atomic_fence (rtx model_rtx, bool before)
+{
+  enum memmodel model = memmodel_base (INTVAL (model_rtx));
+  bool need;
+
+  if (before)
+    need = (is_mm_release (model) || is_mm_acq_rel (model)
+	    || is_mm_seq_cst (model));
+  else
+    need = (is_mm_consume (model) || is_mm_acquire (model)
+	    || is_mm_acq_rel (model) || is_mm_seq_cst (model));
+
+  if (need)
+    emit_insn (gen_mem_thread_fence (GEN_INT (MEMMODEL_SEQ_CST)));
+}
+
 machine_mode
 v850_gen_float_compare (enum rtx_code cond, machine_mode mode, rtx op0, rtx op1)
 {

@@ -45,6 +45,7 @@ extern rtx    v850_gen_compare              (enum rtx_code, machine_mode,
 extern machine_mode  v850_gen_float_compare (enum rtx_code,
 						  machine_mode, rtx, rtx);
 extern machine_mode  v850_select_cc_mode (RTX_CODE, rtx, rtx);
+extern void v850_atomic_fence (rtx, bool);
 #endif
 #endif /* RTX_CODE */
 
