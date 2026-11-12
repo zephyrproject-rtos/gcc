@@ -1420,6 +1420,7 @@ See RS/6000 and PowerPC Options.
 -mloop
 -mg4
 -mg4mh2
+-mfxu
 -mrelax
 -mlong-jumps
 -msoft-float
@@ -34069,6 +34070,19 @@ Enables the instructions of the RH850 G4MH2 core on top of
 defined if this option is used.  The G4MH2 core raises an exception on a
 misaligned access, so this option also enforces strict alignment and
 rejects @option{-mno-strict-align}.
+
+@opindex mfxu
+@item -mfxu
+Enables the FXU vector instructions of the RH850 G4MH2 core and passes
+@option{-mfxu} to the assembler.  It implies @option{-mg4mh2}.  The
+128-bit vector registers @code{wr0} to @code{wr31} hold the
+@code{vector_size (16)} types of @code{float} and 32-bit integers, which
+are 16-byte aligned.  The vector registers are preserved across calls.
+Vector arguments are passed in @code{wr0} to @code{wr31} and then on the
+stack, and vector return values in memory.  A function that keeps vector
+values on the stack aligns its frame to 16 bytes at run time.  The
+preprocessor constant @code{__V850_FXU__} is defined if this option is
+used.
 
 @opindex mrh850-abi
 @opindex mghs

@@ -1,7 +1,7 @@
 /* { dg-do run } */
 /* { dg-options "-fno-strict-aliasing" } */
 /* { dg-skip-if "unaligned access" { arc*-*-* epiphany-*-* nds32*-*-* sparc*-*-* sh*-*-* tic6x-*-* } } */
-/* { dg-skip-if "unaligned access" { v850*-*-* } { "-mg4mh2" } { "" } } */
+/* { dg-skip-if "unaligned access" { v850*-*-* } { "-mg4mh2" "-mfxu" } { "" } } */
 
 extern void abort (void);
 #if (__SIZEOF_INT__ <= 2)

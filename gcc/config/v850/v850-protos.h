@@ -27,10 +27,14 @@ extern void   expand_epilogue               (void);
 extern int    v850_handle_pragma            (int (*)(void), void (*)(int), char *);
 extern int    compute_register_save_size    (long *);
 extern int    compute_frame_size            (poly_int64, long *);
+extern HOST_WIDE_INT v850_initial_elimination_offset (int, int);
 extern void   v850_init_expanders           (void);
 
 #ifdef RTX_CODE
 extern rtx    v850_return_addr              (int);
+extern bool v850_fxu_mem_p (rtx, int, bool);
+extern bool v850_expand_fxu_move (rtx, rtx);
+extern void v850_expand_fxu_misaligned_move (rtx, rtx);
 extern const char *output_move_single       (rtx *);
 extern char * construct_save_jarl           (rtx);
 extern char * construct_restore_jr          (rtx);

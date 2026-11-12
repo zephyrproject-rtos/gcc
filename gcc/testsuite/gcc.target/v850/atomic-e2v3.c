@@ -1,6 +1,6 @@
 /* { dg-do compile } */
 /* { dg-options "-O2 -mv850e2v3" } */
-/* { dg-skip-if "tests the code without -mg4" { *-*-* } { "-mg4" "-mg4mh2" } { "" } } */
+/* { dg-skip-if "tests the code without -mg4" { *-*-* } { "-mg4" "-mg4mh2" "-mfxu" } { "" } } */
 
 int v;
 

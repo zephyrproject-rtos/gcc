@@ -44,6 +44,8 @@
 #include "output.h"
 #include "insn-attr.h"
 #include "expr.h"
+#include "explow.h"
+#include "optabs.h"
 #include "cfgrtl.h"
 #include "builtins.h"
 
@@ -119,6 +121,14 @@ v850_pass_by_reference (cumulative_args_t, const function_arg_info &arg)
   return size > 8;
 }
 
+/* Return true if ARG is an FXU vector, which goes in a wr register.  */
+
+static bool
+v850_fxu_arg_p (const function_arg_info &arg)
+{
+  return TARGET_FXU && (arg.mode == V4SFmode || arg.mode == V4SImode);
+}
+
 /* Return an RTX to represent where argument ARG will be passed to a function.
    If the result is NULL_RTX, the argument will be pushed.  */
 
@@ -131,6 +141,10 @@ v850_function_arg (cumulative_args_t cum_v, const function_arg_info &arg)
 
   if (!arg.named)
     return NULL_RTX;
+
+  if (v850_fxu_arg_p (arg))
+    return (cum->nwr <= WR31_REGNUM - WR0_REGNUM
+	    ? gen_rtx_REG (arg.mode, WR0_REGNUM + cum->nwr) : NULL_RTX);
 
   size = arg.promoted_size_in_bytes ();
   size = (size + UNITS_PER_WORD -1) & ~(UNITS_PER_WORD -1);
@@ -187,7 +201,7 @@ v850_arg_partial_bytes (cumulative_args_t cum_v, const function_arg_info &arg)
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
   int size, align;
 
-  if (!arg.named)
+  if (!arg.named || v850_fxu_arg_p (arg))
     return 0;
 
   size = arg.promoted_size_in_bytes ();
@@ -223,6 +237,13 @@ v850_function_arg_advance (cumulative_args_t cum_v,
 			   const function_arg_info &arg)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
+
+  if (v850_fxu_arg_p (arg))
+    {
+      if (arg.named)
+	cum->nwr++;
+      return;
+    }
 
   if (!TARGET_GCC_ABI)
     cum->nbytes += ((arg.promoted_size_in_bytes () + UNITS_PER_WORD - 1)
@@ -1574,6 +1595,15 @@ compute_register_save_size (long * p_reg_saved)
        and stack pointer -> |    | /             _|_   |
   -------------------------- ---- ------------------   V */
 
+/* Size of the locals and outgoing arguments in a realigned frame.  */
+
+static HOST_WIDE_INT
+v850_realign_locals_size (void)
+{
+  return ROUND_UP (get_frame_size () + crtl->outgoing_args_size,
+		   MAX_STACK_ALIGNMENT / BITS_PER_UNIT);
+}
+
 int
 compute_frame_size (poly_int64 size, long * p_reg_saved)
 {
@@ -1664,6 +1694,157 @@ v850_epilogue_restore (rtx_insn *insn, rtx reg)
   add_reg_note (insn, REG_CFA_RESTORE, reg);
 }
 
+/* Return the number of wr registers to save, with their mask in *SAVED.  */
+
+static int
+v850_fxu_saved_regs (unsigned int *saved)
+{
+  int n = 0;
+
+  *saved = 0;
+  for (int i = WR0_REGNUM; i <= WR31_REGNUM; i++)
+    if (df_regs_ever_live_p (i) && ! call_used_or_fixed_reg_p (i))
+      {
+	*saved |= 1u << (i - WR0_REGNUM);
+	n++;
+      }
+  return n;
+}
+
+/* Save or restore the wr registers in SAVED at sp + OFFSET.  */
+
+static void
+v850_fxu_save_restore (unsigned int saved, HOST_WIDE_INT offset, bool save)
+{
+  for (int i = WR0_REGNUM; i <= WR31_REGNUM; i++)
+    if (saved & (1u << (i - WR0_REGNUM)))
+      {
+	rtx addr;
+	rtx reg = gen_rtx_REG (V4SFmode, i);
+	rtx mem;
+
+	if (offset <= 32752)
+	  addr = plus_constant (Pmode, stack_pointer_rtx, offset);
+	else
+	  {
+	    addr = gen_rtx_REG (Pmode, 12);
+	    emit_move_insn (addr, GEN_INT (offset));
+	    emit_insn (gen_addsi3_clobber_flags (addr, addr,
+						 stack_pointer_rtx));
+	  }
+	mem = gen_frame_mem (V4SFmode, addr);
+	set_mem_align (mem, 128);
+	emit_insn (save ? gen_rtx_SET (mem, reg) : gen_rtx_SET (reg, mem));
+	offset += 16;
+      }
+}
+
+/* Prologue of a frame realigned at run time; r29 keeps the unaligned sp.  */
+
+static void
+v850_expand_realign_prologue (void)
+{
+  long reg_saved = 0;
+  int regsave = compute_register_save_size (&reg_saved);
+  unsigned int fxu_saved;
+  int nfxu = v850_fxu_saved_regs (&fxu_saved);
+  HOST_WIDE_INT locals = v850_realign_locals_size ();
+  rtx save_regs[32];
+  int num_save = 0;
+  int offset;
+
+  if (v850_interrupt_function_p (current_function_decl))
+    sorry ("FXU vectors on the stack of an interrupt function");
+
+  if (flag_stack_usage_info)
+    current_function_static_stack_size
+      = regsave + 16 * nfxu + locals + MAX_STACK_ALIGNMENT / BITS_PER_UNIT;
+
+  for (int i = 1; i < 32; i++)
+    if (((1L << i) & reg_saved) != 0)
+      save_regs[num_save++] = gen_rtx_REG (Pmode, i);
+
+  if (crtl->args.pretend_args_size)
+    increment_stack (- crtl->args.pretend_args_size, true);
+
+  increment_stack (- regsave, true);
+  offset = regsave - 4;
+  if (num_save > 0 && REGNO (save_regs[num_save - 1]) == LINK_POINTER_REGNUM)
+    {
+      F (emit_move_insn (gen_rtx_MEM (SImode,
+				      plus_constant (Pmode, stack_pointer_rtx,
+						     offset)),
+			 save_regs[--num_save]));
+      offset -= 4;
+    }
+  for (int i = 0; i < num_save; i++)
+    {
+      F (emit_move_insn (gen_rtx_MEM (SImode,
+				      plus_constant (Pmode, stack_pointer_rtx,
+						     offset)),
+			 save_regs[i]));
+      offset -= 4;
+    }
+
+  F (emit_move_insn (hard_frame_pointer_rtx, stack_pointer_rtx));
+
+  increment_stack (- (16 * nfxu + locals), false);
+  if (nfxu > 0 || crtl->stack_alignment_needed > STACK_BOUNDARY)
+    {
+      rtx mask = gen_rtx_REG (Pmode, 12);
+      emit_move_insn (mask, GEN_INT (-(MAX_STACK_ALIGNMENT / BITS_PER_UNIT)));
+      emit_insn (gen_andsi3_clobber_flags (stack_pointer_rtx,
+					   stack_pointer_rtx, mask));
+    }
+
+  v850_fxu_save_restore (fxu_saved, locals, true);
+}
+
+/* Epilogue of a frame realigned at run time.  */
+
+static void
+v850_expand_realign_epilogue (void)
+{
+  long reg_saved = 0;
+  int regsave = compute_register_save_size (&reg_saved);
+  unsigned int fxu_saved;
+  rtx restore_regs[32];
+  int num_restore = 0;
+  int offset;
+
+  v850_fxu_saved_regs (&fxu_saved);
+  v850_fxu_save_restore (fxu_saved, v850_realign_locals_size (), false);
+
+  emit_move_insn (stack_pointer_rtx, hard_frame_pointer_rtx);
+
+  for (int i = 1; i < 32; i++)
+    if (((1L << i) & reg_saved) != 0)
+      restore_regs[num_restore++] = gen_rtx_REG (Pmode, i);
+
+  offset = regsave - 4;
+  if (num_restore > 0
+      && REGNO (restore_regs[num_restore - 1]) == LINK_POINTER_REGNUM)
+    {
+      emit_move_insn (restore_regs[--num_restore],
+		      gen_rtx_MEM (SImode,
+				   plus_constant (Pmode, stack_pointer_rtx,
+						  offset)));
+      offset -= 4;
+    }
+  for (int i = 0; i < num_restore; i++)
+    {
+      emit_move_insn (restore_regs[i],
+		      gen_rtx_MEM (SImode,
+				   plus_constant (Pmode, stack_pointer_rtx,
+						  offset)));
+      emit_use (restore_regs[i]);
+      offset -= 4;
+    }
+
+  increment_stack (regsave + crtl->args.pretend_args_size, false);
+  emit_jump_insn (gen_return_internal ());
+}
+
 void
 expand_prologue (void)
 {
@@ -1677,6 +1858,19 @@ expand_prologue (void)
   int code;
   int interrupt_handler = v850_interrupt_function_p (current_function_decl);
   long reg_saved = 0;
+
+  if (stack_realign_fp)
+    {
+      v850_expand_realign_prologue ();
+      return;
+    }
+
+  if (TARGET_FXU)
+    {
+      unsigned int fxu_saved;
+      if (v850_fxu_saved_regs (&fxu_saved) > 0)
+	sorry ("saving FXU registers in a frame that is not realigned");
+    }
 
   actual_fsize = compute_frame_size (size, &reg_saved);
 
@@ -1862,6 +2056,14 @@ expand_epilogue (void)
   int interrupt_handler = v850_interrupt_function_p (current_function_decl);
   HOST_WIDE_INT cfa = actual_fsize + crtl->args.pretend_args_size;
   rtx_insn *insn;
+
+  if (stack_realign_fp)
+    {
+      v850_expand_realign_epilogue ();
+      v850_interrupt_cache_p = FALSE;
+      v850_interrupt_p = FALSE;
+      return;
+    }
 
   /* Eliminate the initial stack stored by interrupt functions.  */
   if (interrupt_handler)
@@ -3014,9 +3216,69 @@ v850_libcall_value (machine_mode mode,
 /* Worker function for TARGET_CAN_ELIMINATE.  */
 
 static bool
-v850_can_eliminate (const int from ATTRIBUTE_UNUSED, const int to)
+v850_can_eliminate (const int from, const int to)
 {
+  if (stack_realign_fp)
+    return ((from == ARG_POINTER_REGNUM && to == HARD_FRAME_POINTER_REGNUM)
+	    || (from == FRAME_POINTER_REGNUM && to == STACK_POINTER_REGNUM));
+
   return (to == STACK_POINTER_REGNUM ? ! frame_pointer_needed : true);
+}
+
+HOST_WIDE_INT
+v850_initial_elimination_offset (int from, int to)
+{
+  if (stack_realign_fp)
+    {
+      if (from == FRAME_POINTER_REGNUM && to == STACK_POINTER_REGNUM)
+	return v850_realign_locals_size ();
+      if (from == ARG_POINTER_REGNUM && to == HARD_FRAME_POINTER_REGNUM)
+	return compute_register_save_size (NULL);
+      return 0;
+    }
+
+  if (from == FRAME_POINTER_REGNUM)
+    return get_frame_size () + crtl->outgoing_args_size;
+  if (from == ARG_POINTER_REGNUM)
+    return compute_frame_size (get_frame_size (), (long *) 0);
+  gcc_unreachable ();
+}
+
+/* Implement TARGET_MD_ASM_ADJUST: an asm using wr needs a realigned frame.  */
+
+static rtx_insn *
+v850_md_asm_adjust (vec<rtx> &, vec<rtx> &, vec<machine_mode> &,
+		    vec<const char *> &constraints, vec<rtx> &, vec<rtx> &,
+		    HARD_REG_SET &clobbered_regs, location_t)
+{
+  bool fxu = false;
+
+  if (! TARGET_FXU)
+    return NULL;
+  for (int i = WR0_REGNUM; i <= WR31_REGNUM; i++)
+    if (TEST_HARD_REG_BIT (clobbered_regs, i))
+      fxu = true;
+  for (unsigned int i = 0; i < constraints.length (); i++)
+    if (strchr (constraints[i], 'w'))
+      fxu = true;
+  if (fxu && ! crtl->stack_realign_processed
+      && crtl->stack_alignment_estimated < MAX_STACK_ALIGNMENT)
+    crtl->stack_alignment_estimated = MAX_STACK_ALIGNMENT;
+  return NULL;
+}
+
+/* Implement TARGET_GET_DRAP_RTX.  */
+
+static rtx
+v850_get_drap_rtx (void)
+{
+  if (crtl->stack_realign_needed && crtl->need_drap)
+    {
+      sorry ("dynamic stack allocation in a function that keeps FXU vectors "
+	     "on the stack");
+      crtl->need_drap = false;
+    }
+  return NULL_RTX;
 }
 
 /* Worker function for TARGET_CONDITIONAL_REGISTER_USAGE.
@@ -3032,6 +3294,10 @@ v850_conditional_register_usage (void)
      fixed_regs[2] = 0;  call_used_regs[2] = 0;
      fixed_regs[5] = 0;  call_used_regs[5] = 1;
     }
+
+  if (! TARGET_FXU)
+    for (int i = WR0_REGNUM; i <= WR31_REGNUM; i++)
+      fixed_regs[i] = call_used_regs[i] = 1;
 }
 
 /* Worker function for TARGET_ASM_TRAMPOLINE_TEMPLATE.  */
@@ -3236,6 +3502,9 @@ v850_option_override (void)
   if (! TARGET_GCC_ABI && small_memory_max[(int) SMALL_MEMORY_TDA] > 0)
     error ("%<-mtda%> is not supported with the RH850 ABI; use %<-mgcc-abi%>");
 
+  if (TARGET_FXU)
+    target_flags |= MASK_G4MH2;
+
   if (TARGET_G4MH2)
     {
       target_flags |= MASK_G4;
@@ -3297,7 +3566,187 @@ v850_gen_movdi (rtx * operands)
 static bool
 v850_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
 {
+  if (FXU_REGNO_P (regno))
+    return mode == V4SFmode || mode == V4SImode;
+  if (mode == V4SFmode || mode == V4SImode)
+    return false;
   return GET_MODE_SIZE (mode) <= 4 || ((regno & 1) == 0 && regno != 0);
+}
+
+/* Implement TARGET_HARD_REGNO_NREGS.  */
+
+static unsigned int
+v850_hard_regno_nregs (unsigned int regno, machine_mode mode)
+{
+  if (FXU_REGNO_P (regno))
+    return 1;
+  return CEIL (GET_MODE_SIZE (mode), UNITS_PER_WORD);
+}
+
+/* Implement TARGET_CLASS_MAX_NREGS.  */
+
+static unsigned char
+v850_class_max_nregs (reg_class_t rclass, machine_mode mode)
+{
+  if (rclass == FXU_REGS)
+    return 1;
+  return CEIL (GET_MODE_SIZE (mode), UNITS_PER_WORD);
+}
+
+/* Implement TARGET_CAN_CHANGE_MODE_CLASS.  */
+
+static bool
+v850_can_change_mode_class (machine_mode from, machine_mode to,
+			    reg_class_t rclass)
+{
+  if (reg_classes_intersect_p (rclass, FXU_REGS))
+    return GET_MODE_SIZE (from) == GET_MODE_SIZE (to);
+  return true;
+}
+
+/* Implement TARGET_VECTOR_MODE_SUPPORTED_P.  */
+
+static bool
+v850_vector_mode_supported_p (machine_mode mode)
+{
+  return TARGET_FXU && (mode == V4SFmode || mode == V4SImode);
+}
+
+/* Implement TARGET_SECONDARY_MEMORY_NEEDED.  */
+
+static bool
+v850_secondary_memory_needed (machine_mode, reg_class_t class1,
+			      reg_class_t class2)
+{
+  return (reg_classes_intersect_p (class1, FXU_REGS)
+	  != reg_classes_intersect_p (class2, FXU_REGS));
+}
+
+/* Implement TARGET_REGISTER_MOVE_COST.  */
+
+static int
+v850_register_move_cost (machine_mode, reg_class_t from, reg_class_t to)
+{
+  if (reg_classes_intersect_p (from, FXU_REGS)
+      != reg_classes_intersect_p (to, FXU_REGS))
+    return 20;
+  return 2;
+}
+
+/* Return true if X is a base register plus a disp16 multiple of SIZE.  */
+
+bool
+v850_fxu_mem_p (rtx x, int size, bool strict)
+{
+  rtx addr;
+  HOST_WIDE_INT disp = 0;
+
+  if (! MEM_P (x))
+    return false;
+  addr = XEXP (x, 0);
+  if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1)))
+    {
+      disp = INTVAL (XEXP (addr, 1));
+      addr = XEXP (addr, 0);
+    }
+  if (! v850_rtx_ok_for_base_p (addr, strict))
+    return false;
+  return (disp % size == 0 && disp >= -32768 && disp <= 32767);
+}
+
+/* Return MEM with an address that the FXU instructions accept.  */
+
+static rtx
+v850_fxu_legitimize_mem (rtx mem, int size)
+{
+  if (v850_fxu_mem_p (mem, size, false))
+    return mem;
+  return replace_equiv_address (mem, force_reg (Pmode, XEXP (mem, 0)));
+}
+
+/* Expand an FXU move with memory below 16-byte alignment.  */
+
+void
+v850_expand_fxu_misaligned_move (rtx dst, rtx src)
+{
+  machine_mode mode = GET_MODE (dst);
+  rtx mem = MEM_P (src) ? src : dst;
+
+  if (! MEM_P (mem) || (MEM_P (src) && MEM_P (dst)))
+    {
+      emit_move_insn (dst, force_reg (mode, src));
+      return;
+    }
+
+  if (MEM_ALIGN (mem) < BITS_PER_WORD)
+    {
+      rtx tmp = assign_stack_temp (mode, GET_MODE_SIZE (mode));
+
+      if (MEM_P (src))
+	{
+	  emit_block_move (tmp, src, GEN_INT (GET_MODE_SIZE (mode)),
+			   BLOCK_OP_NORMAL);
+	  emit_move_insn (dst, tmp);
+	}
+      else
+	{
+	  emit_move_insn (tmp, src);
+	  emit_block_move (dst, tmp, GEN_INT (GET_MODE_SIZE (mode)),
+			   BLOCK_OP_NORMAL);
+	}
+      return;
+    }
+
+  rtx base = force_reg (Pmode, XEXP (mem, 0));
+  rtx lo = gen_rtx_MEM (DImode, base);
+  rtx hi = gen_rtx_MEM (DImode, plus_constant (Pmode, base, 8));
+
+  if (MEM_P (src))
+    {
+      rtx reg = REG_P (dst) ? dst : gen_reg_rtx (mode);
+      emit_insn (gen_fxu_ldv_dw_both (mode, reg, lo));
+      emit_insn (gen_fxu_ldv_dw (mode, reg, reg, hi, GEN_INT (2)));
+      if (reg != dst)
+	emit_move_insn (dst, reg);
+    }
+  else
+    {
+      if (! REG_P (src))
+	src = force_reg (mode, src);
+      emit_insn (gen_fxu_stv_dw (mode, lo, src, GEN_INT (0)));
+      emit_insn (gen_fxu_stv_dw (mode, hi, src, GEN_INT (1)));
+    }
+}
+
+/* Expand a move of an FXU vector.  Return true if it was done here.  */
+
+bool
+v850_expand_fxu_move (rtx dst, rtx src)
+{
+  machine_mode mode = GET_MODE (dst);
+
+  if (! can_create_pseudo_p ())
+    return false;
+
+  if (MEM_P (dst) && ! register_operand (src, mode))
+    src = force_reg (mode, src);
+
+  if (CONSTANT_P (src))
+    src = force_const_mem (mode, src);
+
+  if ((MEM_P (src) && MEM_ALIGN (src) < 128)
+      || (MEM_P (dst) && MEM_ALIGN (dst) < 128))
+    {
+      v850_expand_fxu_misaligned_move (dst, src);
+      return true;
+    }
+
+  if (MEM_P (src))
+    src = v850_fxu_legitimize_mem (src, 16);
+  if (MEM_P (dst))
+    dst = v850_fxu_legitimize_mem (dst, 16);
+  emit_insn (gen_rtx_SET (dst, src));
+  return true;
 }
 
 /* Implement TARGET_MODES_TIEABLE_P.  */
@@ -3306,7 +3755,9 @@ static bool
 v850_modes_tieable_p (machine_mode mode1, machine_mode mode2)
 {
   return (mode1 == mode2
-	  || (GET_MODE_SIZE (mode1) <= 4 && GET_MODE_SIZE (mode2) <= 4));
+	  || (GET_MODE_SIZE (mode1) <= 4 && GET_MODE_SIZE (mode2) <= 4)
+	  || ((mode1 == V4SFmode || mode1 == V4SImode)
+	      && (mode2 == V4SFmode || mode2 == V4SImode)));
 }
 
 static bool
@@ -3435,6 +3886,30 @@ v850_can_inline_p (tree caller, tree callee)
 
 #undef  TARGET_HARD_REGNO_MODE_OK
 #define TARGET_HARD_REGNO_MODE_OK v850_hard_regno_mode_ok
+
+#undef  TARGET_HARD_REGNO_NREGS
+#define TARGET_HARD_REGNO_NREGS v850_hard_regno_nregs
+
+#undef  TARGET_CLASS_MAX_NREGS
+#define TARGET_CLASS_MAX_NREGS v850_class_max_nregs
+
+#undef  TARGET_CAN_CHANGE_MODE_CLASS
+#define TARGET_CAN_CHANGE_MODE_CLASS v850_can_change_mode_class
+
+#undef  TARGET_VECTOR_MODE_SUPPORTED_P
+#define TARGET_VECTOR_MODE_SUPPORTED_P v850_vector_mode_supported_p
+
+#undef  TARGET_SECONDARY_MEMORY_NEEDED
+#define TARGET_SECONDARY_MEMORY_NEEDED v850_secondary_memory_needed
+
+#undef  TARGET_REGISTER_MOVE_COST
+#define TARGET_REGISTER_MOVE_COST v850_register_move_cost
+
+#undef  TARGET_MD_ASM_ADJUST
+#define TARGET_MD_ASM_ADJUST v850_md_asm_adjust
+
+#undef  TARGET_GET_DRAP_RTX
+#define TARGET_GET_DRAP_RTX v850_get_drap_rtx
 
 #undef  TARGET_MODES_TIEABLE_P
 #define TARGET_MODES_TIEABLE_P v850_modes_tieable_p

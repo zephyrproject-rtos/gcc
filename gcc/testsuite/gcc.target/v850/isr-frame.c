@@ -1,6 +1,6 @@
 /* { dg-do compile } */
 /* { dg-options "-O2" } */
-/* { dg-skip-if "tests the base targets" { *-*-* } { "-mg4" "-mg4mh2" "-mv850e3v5" } { "" } } */
+/* { dg-skip-if "tests the base targets" { *-*-* } { "-mfxu" "-mg4" "-mg4mh2" "-mv850e3v5" } { "" } } */
 
 volatile int v;
 

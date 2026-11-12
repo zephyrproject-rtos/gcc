@@ -112,9 +112,11 @@
 %{mhard-float:-mhard-float} \
 %{mgcc-abi:-mgcc-abi} \
 %{mg4:-mg4} \
-%{mg4mh2:-mg4mh2}"
+%{mg4mh2:-mg4mh2} \
+%{mfxu:-mfxu}"
 
 #define DRIVER_SELF_SPECS \
+  "%{mfxu:%{!mg4mh2:-mg4mh2}}", \
   "%{mg4mh2:%{!mg4:-mg4}}", \
   "%{mg4:%{!mv*:-mv850e3v5}}"
 
@@ -161,6 +163,8 @@
 	builtin_define ("__V850_G4__");		\
       if (TARGET_G4MH2)				\
 	builtin_define ("__V850_G4MH2__");	\
+      if (TARGET_FXU)				\
+	builtin_define ("__V850_FXU__");	\
       builtin_define (TARGET_USE_FPU ?		\
 		      "__FPU_OK__" : "__NO_FPU__");\
     }						\
@@ -205,14 +209,18 @@
 #define PARM_BOUNDARY		32
 
 /* The stack goes in 32-bit lumps.  */
-#define STACK_BOUNDARY 		BIGGEST_ALIGNMENT
+#define STACK_BOUNDARY		(TARGET_8BYTE_ALIGN ? 64 : 32)
 
 /* Allocation boundary (in *bits*) for the code of a function.
    16 is the minimum boundary; 32 would give better performance.  */
 #define FUNCTION_BOUNDARY 	(((! TARGET_GCC_ABI) || optimize_size) ? 16 : 32)
 
 /* No data type wants to be aligned rounder than this.  */
-#define BIGGEST_ALIGNMENT	(TARGET_8BYTE_ALIGN ? 64 : 32)
+#define BIGGEST_ALIGNMENT	(TARGET_FXU ? 128 : STACK_BOUNDARY)
+
+#define MAX_STACK_ALIGNMENT	(TARGET_FXU ? 128 : STACK_BOUNDARY)
+
+#define ATTRIBUTE_ALIGNED_VALUE	STACK_BOUNDARY
 
 /* Alignment of field after `int : 0' in a structure.  */
 #define EMPTY_FIELD_BOUNDARY 32
@@ -250,7 +258,9 @@
    All registers that the compiler knows about must be given numbers,
    even those that are not normally considered general registers.  */
 
-#define FIRST_PSEUDO_REGISTER 36
+#define FIRST_PSEUDO_REGISTER 68
+
+#define FXU_REGNO_P(REGNO) ((REGNO) >= WR0_REGNUM && (REGNO) <= WR31_REGNUM)
 
 /* 1 for registers that have pervasive standard uses
    and are not available for the register allocator.  */
@@ -261,7 +271,11 @@
     0, 0, 0, 0, 0, 0, 0, 0, \
     0, 0, 0, 0, 0, 0, 1, 0, \
     1, 1,	\
-    1, 1}
+    1, 1,	\
+    0, 0, 0, 0, 0, 0, 0, 0, \
+    0, 0, 0, 0, 0, 0, 0, 0, \
+    0, 0, 0, 0, 0, 0, 0, 0, \
+    0, 0, 0, 0, 0, 0, 0, 0}
 
 /* 1 for registers not available across function calls.
    These must include the FIXED_REGISTERS and also any
@@ -277,7 +291,11 @@
     1, 1, 1, 1, 0, 0, 0, 0, \
     0, 0, 0, 0, 0, 0, 1, 1, \
     1, 1,	\
-    1, 1}
+    1, 1,	\
+    0, 0, 0, 0, 0, 0, 0, 0, \
+    0, 0, 0, 0, 0, 0, 0, 0, \
+    0, 0, 0, 0, 0, 0, 0, 0, \
+    0, 0, 0, 0, 0, 0, 0, 0}
 
 /* List the order in which to allocate registers.  Each register must be
    listed once, even those in FIXED_REGISTERS.
@@ -294,6 +312,8 @@
    6,  7,  8,  9, 31,			/* argument registers */	\
   29, 28, 27, 26, 25, 24, 23, 22,	/* saved registers */		\
   21, 20,  2,								\
+  36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,	\
+  52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67,	\
    0,  1,  3,  4,  5, 30, 32, 33,      /* fixed registers */           \
   34, 35								\
 }
@@ -321,7 +341,7 @@
    
 enum reg_class
 {
-  NO_REGS, EVEN_REGS, GENERAL_REGS, ALL_REGS, LIM_REG_CLASSES
+  NO_REGS, EVEN_REGS, GENERAL_REGS, FXU_REGS, ALL_REGS, LIM_REG_CLASSES
 };
 
 #define N_REG_CLASSES (int) LIM_REG_CLASSES
@@ -329,7 +349,7 @@ enum reg_class
 /* Give names of register classes as strings for dump file.  */
 
 #define REG_CLASS_NAMES \
-{ "NO_REGS", "EVEN_REGS", "GENERAL_REGS", "ALL_REGS", "LIM_REGS" }
+{ "NO_REGS", "EVEN_REGS", "GENERAL_REGS", "FXU_REGS", "ALL_REGS", "LIM_REGS" }
 
 /* Define which registers fit in which classes.
    This is an initializer for a vector of HARD_REG_SET
@@ -337,10 +357,11 @@ enum reg_class
 
 #define REG_CLASS_CONTENTS                     \
 {                                              \
-  { 0x00000000,0x0 }, /* NO_REGS      */       \
-  { 0x55555554,0x0 }, /* EVEN_REGS */          \
-  { 0xfffffffe,0x0 }, /* GENERAL_REGS */       \
-  { 0xffffffff,0x0 }, /* ALL_REGS      */      \
+  { 0x00000000,0x0,0x0 }, /* NO_REGS      */   \
+  { 0x55555554,0x0,0x0 }, /* EVEN_REGS */      \
+  { 0xfffffffe,0x0,0x0 }, /* GENERAL_REGS */   \
+  { 0x00000000,0xfffffff0,0xf }, /* FXU_REGS */ \
+  { 0xffffffff,0xfffffff0,0xf }, /* ALL_REGS */ \
 }
 
 /* The same information, inverted:
@@ -348,7 +369,9 @@ enum reg_class
    reg number REGNO.  This could be a conditional expression
    or could index an array.  */
 
-#define REGNO_REG_CLASS(REGNO)  ((REGNO == CC_REGNUM || REGNO == FCC_REGNUM) ? NO_REGS : GENERAL_REGS)
+#define REGNO_REG_CLASS(REGNO) \
+  ((REGNO) == CC_REGNUM || (REGNO) == FCC_REGNUM ? NO_REGS \
+   : FXU_REGNO_P (REGNO) ? FXU_REGS : GENERAL_REGS)
 
 /* The class value for index registers, and the one for base regs.  */
 
@@ -367,7 +390,8 @@ enum reg_class
 #define REGNO_OK_FOR_BASE_P(regno)             \
   (((regno) < FIRST_PSEUDO_REGISTER            \
     && (regno) != CC_REGNUM                    \
-    && (regno) != FCC_REGNUM)                  \
+    && (regno) != FCC_REGNUM		       \
+    && ! FXU_REGNO_P (regno))		       \
    || reg_renumber[regno] >= 0)
 
 #define REGNO_OK_FOR_INDEX_P(regno) 0
@@ -488,14 +512,7 @@ enum reg_class
    of registers.  */
 
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET)			\
-{									\
-  if ((FROM) == FRAME_POINTER_REGNUM)					\
-    (OFFSET) = get_frame_size () + crtl->outgoing_args_size;	\
-  else if ((FROM) == ARG_POINTER_REGNUM)				\
-   (OFFSET) = compute_frame_size (get_frame_size (), (long *)0);	\
-  else									\
-    gcc_unreachable ();							\
-}
+  ((OFFSET) = v850_initial_elimination_offset ((FROM), (TO)))
 
 /* Keep the stack pointer constant throughout the function.  */
 #define ACCUMULATE_OUTGOING_ARGS 1
@@ -509,14 +526,14 @@ enum reg_class
    such as FUNCTION_ARG to determine where the next arg should go.  */
 
 #define CUMULATIVE_ARGS struct cum_arg
-struct cum_arg { int nbytes; };
+struct cum_arg { int nbytes; int nwr; };
 
 /* Initialize a variable CUM of type CUMULATIVE_ARGS
    for a call to a function whose data type is FNTYPE.
    For a library call, FNTYPE is 0.  */
 
 #define INIT_CUMULATIVE_ARGS(CUM, FNTYPE, LIBNAME, INDIRECT, N_NAMED_ARGS) \
-  do { (CUM).nbytes = 0; } while (0)
+  do { (CUM).nbytes = 0; (CUM).nwr = 0; } while (0)
 
 /* When a parameter is passed in a register, stack space is still
    allocated for it.  */
@@ -524,7 +541,8 @@ struct cum_arg { int nbytes; };
 
 /* 1 if N is a possible register number for function argument passing.  */
 
-#define FUNCTION_ARG_REGNO_P(N) (N >= 6 && N <= 9)
+#define FUNCTION_ARG_REGNO_P(N) \
+  ((N >= 6 && N <= 9) || (TARGET_FXU && FXU_REGNO_P (N)))
 
 #define DEFAULT_PCC_STRUCT_RETURN 0
 
@@ -670,7 +688,11 @@ typedef enum
   "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",      \
   "r24", "r25", "r26", "r27", "r28", "r29",  "ep", "r31",      \
   "psw", "fcc",      \
-  ".fp", ".ap"}
+  ".fp", ".ap",      \
+  "wr0", "wr1", "wr2", "wr3", "wr4", "wr5", "wr6", "wr7",      \
+  "wr8", "wr9", "wr10", "wr11", "wr12", "wr13", "wr14", "wr15",      \
+  "wr16", "wr17", "wr18", "wr19", "wr20", "wr21", "wr22", "wr23",      \
+  "wr24", "wr25", "wr26", "wr27", "wr28", "wr29", "wr30", "wr31"}
 
 /* Register numbers */
 

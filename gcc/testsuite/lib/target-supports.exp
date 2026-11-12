@@ -12567,6 +12567,15 @@ proc check_effective_target_s390_vx { } {
     } "-march=z13 -mzarch" ]
 }
 
+
+proc check_effective_target_v850_fxu { } {
+    if { ![istarget v850*-*-*] } {
+	return 0
+    }
+    return [check_no_compiler_messages v850_fxu assembly {
+    }]
+}
+
 # Same as above but for the z14 vector enhancement facility. Test
 # is performed with the vector nand instruction.
 proc check_effective_target_s390_vxe { } {
