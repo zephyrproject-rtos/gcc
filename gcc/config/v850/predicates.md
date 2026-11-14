@@ -569,3 +569,11 @@
 
   return 0;
 })
+
+
+(define_predicate "v850_fxu_comparison_operator"
+  (match_code "eq,ne,lt,le,gt,ge,unordered,ordered,uneq,unlt,unle,ungt,unge,
+	       ltgt")
+{
+  return v850_fxu_fcond (GET_CODE (op), NULL, NULL) >= 0;
+})

@@ -17,6 +17,9 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
+(define_register_constraint "w" "TARGET_FXU ? FXU_REGS : NO_REGS"
+  "@internal")
+
 (define_register_constraint "e" "EVEN_REGS"
   "@internal")
 
@@ -106,3 +109,18 @@
 (define_constraint "W"
   "@internal"
   (match_test "disp23_operand (op, VOIDmode)"))
+
+(define_memory_constraint "Yq"
+  "@internal"
+  (and (match_code "mem")
+       (match_test "v850_fxu_mem_p (op, 16, reload_completed)")))
+
+(define_memory_constraint "Yd"
+  "@internal"
+  (and (match_code "mem")
+       (match_test "v850_fxu_mem_p (op, 8, reload_completed)")))
+
+(define_memory_constraint "Yw"
+  "@internal"
+  (and (match_code "mem")
+       (match_test "v850_fxu_mem_p (op, 4, reload_completed)")))

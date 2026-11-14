@@ -44,8 +44,17 @@
 #include "output.h"
 #include "insn-attr.h"
 #include "expr.h"
+#include "explow.h"
+#include "optabs.h"
+#include "langhooks.h"
 #include "cfgrtl.h"
 #include "builtins.h"
+#include "rtl-iter.h"
+#include "fold-const.h"
+#include "gimple.h"
+#include "gimple-iterator.h"
+#include "cfgloop.h"
+#include "tree-vectorizer.h"
 
 /* This file should be included last.  */
 #include "target-def.h"
@@ -119,6 +128,14 @@ v850_pass_by_reference (cumulative_args_t, const function_arg_info &arg)
   return size > 8;
 }
 
+/* Return true if ARG is an FXU vector, which goes in a wr register.  */
+
+static bool
+v850_fxu_arg_p (const function_arg_info &arg)
+{
+  return TARGET_FXU && (arg.mode == V4SFmode || arg.mode == V4SImode);
+}
+
 /* Return an RTX to represent where argument ARG will be passed to a function.
    If the result is NULL_RTX, the argument will be pushed.  */
 
@@ -131,6 +148,10 @@ v850_function_arg (cumulative_args_t cum_v, const function_arg_info &arg)
 
   if (!arg.named)
     return NULL_RTX;
+
+  if (v850_fxu_arg_p (arg))
+    return (cum->nwr <= WR31_REGNUM - WR0_REGNUM
+	    ? gen_rtx_REG (arg.mode, WR0_REGNUM + cum->nwr) : NULL_RTX);
 
   size = arg.promoted_size_in_bytes ();
   size = (size + UNITS_PER_WORD -1) & ~(UNITS_PER_WORD -1);
@@ -187,7 +208,7 @@ v850_arg_partial_bytes (cumulative_args_t cum_v, const function_arg_info &arg)
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
   int size, align;
 
-  if (!arg.named)
+  if (!arg.named || v850_fxu_arg_p (arg))
     return 0;
 
   size = arg.promoted_size_in_bytes ();
@@ -223,6 +244,13 @@ v850_function_arg_advance (cumulative_args_t cum_v,
 			   const function_arg_info &arg)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
+
+  if (v850_fxu_arg_p (arg))
+    {
+      if (arg.named)
+	cum->nwr++;
+      return;
+    }
 
   if (!TARGET_GCC_ABI)
     cum->nbytes += ((arg.promoted_size_in_bytes () + UNITS_PER_WORD - 1)
@@ -921,6 +949,25 @@ v850_select_cc_mode (enum rtx_code cond, rtx op0, rtx op1)
   return CCmode;
 }
 
+/* Emit a SYNCM before or after an atomic access, as MODEL_RTX needs.  */
+
+void
+v850_atomic_fence (rtx model_rtx, bool before)
+{
+  enum memmodel model = memmodel_base (INTVAL (model_rtx));
+  bool need;
+
+  if (before)
+    need = (is_mm_release (model) || is_mm_acq_rel (model)
+	    || is_mm_seq_cst (model));
+  else
+    need = (is_mm_consume (model) || is_mm_acquire (model)
+	    || is_mm_acq_rel (model) || is_mm_seq_cst (model));
+
+  if (need)
+    emit_insn (gen_mem_thread_fence (GEN_INT (MEMMODEL_SEQ_CST)));
+}
+
 machine_mode
 v850_gen_float_compare (enum rtx_code cond, machine_mode mode, rtx op0, rtx op1)
 {
@@ -1121,6 +1168,14 @@ Saved %d bytes (%d uses of register %s) in function %s, starting as insn %d, end
       if (NONJUMP_INSN_P (insn))
 	{
 	  rtx pattern = single_set (insn);
+
+	  if (pattern && RTX_FRAME_RELATED_P (insn)
+	      && ! find_reg_note (insn, REG_FRAME_RELATED_EXPR, NULL_RTX)
+	      && ! find_reg_note (insn, REG_CFA_OFFSET, NULL_RTX)
+	      && ! find_reg_note (insn, REG_CFA_RESTORE, NULL_RTX)
+	      && ! find_reg_note (insn, REG_CFA_DEF_CFA, NULL_RTX)
+	      && ! find_reg_note (insn, REG_CFA_ADJUST_CFA, NULL_RTX))
+	    add_reg_note (insn, REG_FRAME_RELATED_EXPR, copy_rtx (pattern));
 
 	  /* Replace the memory references.  */
 	  if (pattern)
@@ -1407,14 +1462,13 @@ v850_reorg (void)
 /* # of registers saved by the interrupt handler.  */
 #define INTERRUPT_FIXED_NUM 5
 
-/* # of bytes for registers saved by the interrupt handler.  */
-#define INTERRUPT_FIXED_SAVE_SIZE (4 * INTERRUPT_FIXED_NUM)
+#define INTERRUPT_FIXED_SAVE_SIZE \
+  (4 * INTERRUPT_FIXED_NUM \
+   + (! TARGET_DISABLE_CALLT && TARGET_V850E_UP ? 8 : 0))
 
-/* # of words saved for other registers.  */
-#define INTERRUPT_ALL_SAVE_NUM \
-  (30 - INTERRUPT_FIXED_NUM)
-
-#define INTERRUPT_ALL_SAVE_SIZE (4 * INTERRUPT_ALL_SAVE_NUM)
+#define INTERRUPT_ALL_SAVE_SIZE \
+  ((! TARGET_DISABLE_CALLT && TARGET_V850E_UP) \
+   || (TARGET_PROLOG_FUNCTION && ! TARGET_LONG_CALLS) ? 104 : 120)
 
 int
 compute_register_save_size (long * p_reg_saved)
@@ -1456,6 +1510,10 @@ compute_register_save_size (long * p_reg_saved)
 	    size += 4;
 	    break;
 	  }
+      size += INTERRUPT_FIXED_SAVE_SIZE - 4 * INTERRUPT_FIXED_NUM;
+      if (call_p)
+	size += INTERRUPT_ALL_SAVE_SIZE - 4 * 25;
+      size += v850_interrupt_state_size (v850_interrupt_state ());
     }
   else
     {
@@ -1545,6 +1603,23 @@ compute_register_save_size (long * p_reg_saved)
        and stack pointer -> |    | /             _|_   |
   -------------------------- ---- ------------------   V */
 
+/* Byte alignment of a realigned frame.  */
+
+static HOST_WIDE_INT
+v850_realign_bytes (void)
+{
+  return MAX (crtl->stack_alignment_needed, V850_FXU_ALIGNMENT) / BITS_PER_UNIT;
+}
+
+/* Size of the locals and outgoing arguments in a realigned frame.  */
+
+static HOST_WIDE_INT
+v850_realign_locals_size (void)
+{
+  return ROUND_UP (get_frame_size () + crtl->outgoing_args_size,
+		   v850_realign_bytes ());
+}
+
 int
 compute_frame_size (poly_int64 size, long * p_reg_saved)
 {
@@ -1587,13 +1662,14 @@ use_prolog_function (int num_save, int frame_size)
   return ((save_func_len + restore_func_len) < (save_normal_len + restore_normal_len));
 }
 
-static void
+static rtx_insn *
 increment_stack (signed int amount, bool in_prologue)
 {
   rtx inc;
+  rtx_insn *insn;
 
   if (amount == 0)
-    return;
+    return NULL;
 
   inc = GEN_INT (amount);
 
@@ -1607,9 +1683,299 @@ increment_stack (signed int amount, bool in_prologue)
       inc = reg;
     }
 
-  inc = emit_insn (gen_addsi3_clobber_flags (stack_pointer_rtx, stack_pointer_rtx, inc));
+  insn = emit_insn (gen_addsi3_clobber_flags (stack_pointer_rtx,
+					     stack_pointer_rtx, inc));
   if (in_prologue)
-    F (inc);
+    F (insn);
+  return insn;
+}
+
+/* Describe interrupt prologue INSN: sp moved by DELTA, then the registers
+   in REGS saved at the offsets in OFFS from the new sp.  */
+
+static void
+v850_interrupt_frame_note (rtx_insn *insn, HOST_WIDE_INT delta, int n,
+			   const int *regs, const int *offs)
+{
+  RTX_FRAME_RELATED_P (insn) = 1;
+  for (int i = 0; i < n; i++)
+    add_reg_note (insn, REG_CFA_OFFSET,
+		  gen_rtx_SET (gen_frame_mem (SImode,
+					      plus_constant (Pmode,
+							     stack_pointer_rtx,
+							     offs[i])),
+			       gen_rtx_REG (SImode, regs[i])));
+  add_reg_note (insn, REG_CFA_ADJUST_CFA,
+		gen_rtx_SET (stack_pointer_rtx,
+			     plus_constant (Pmode, stack_pointer_rtx, delta)));
+}
+
+/* Registers saved by save_all_interrupt and their offsets; gp and r11 are
+   left to the copies saved by save_interrupt.  */
+
+static void
+v850_interrupt_save_all_layout (int *regs, int *offs, int *n)
+{
+  int i, k = 0;
+
+  if (! TARGET_DISABLE_CALLT && TARGET_V850E_UP)
+    {
+      static const int lo[] = { 2, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17,
+				18, 19 };
+      static const int lo_off[] = { 100, 96, 92, 88, 84, 80, 72, 68, 64, 60,
+				    56, 52, 48, 44 };
+      for (i = 0; i < 14; i++, k++)
+	regs[k] = lo[i], offs[k] = lo_off[i];
+      for (i = 20; i <= 29; i++, k++)
+	regs[k] = i, offs[k] = 40 - 4 * (i - 20);
+      regs[k] = LINK_POINTER_REGNUM, offs[k++] = 0;
+    }
+  else
+    {
+      static const int lo[] = { 31, 2, 6, 7, 8, 9 };
+      static const int lo_off[] = { 100, 96, 88, 84, 80, 76 };
+      for (i = 0; i < 6; i++, k++)
+	regs[k] = lo[i], offs[k] = lo_off[i];
+      for (i = 12; i <= 29; i++, k++)
+	regs[k] = i, offs[k] = 68 - 4 * (i - 12);
+      for (i = 0; i < k; i++)
+	offs[i] += INTERRUPT_ALL_SAVE_SIZE - 104;
+    }
+  *n = k;
+}
+
+/* Mark epilogue INSN as defining the CFA as REG + OFFSET.  */
+
+static void
+v850_epilogue_def_cfa (rtx_insn *insn, rtx reg, HOST_WIDE_INT offset)
+{
+  if (insn == NULL)
+    return;
+  RTX_FRAME_RELATED_P (insn) = 1;
+  add_reg_note (insn, REG_CFA_DEF_CFA, plus_constant (Pmode, reg, offset));
+}
+
+/* Mark epilogue INSN as restoring REG.  */
+
+static void
+v850_epilogue_restore (rtx_insn *insn, rtx reg)
+{
+  RTX_FRAME_RELATED_P (insn) = 1;
+  add_reg_note (insn, REG_CFA_RESTORE, reg);
+}
+
+/* Return the number of wr registers to save, with their mask in *SAVED.  */
+
+static int
+v850_fxu_saved_regs (unsigned int *saved)
+{
+  int n = 0;
+
+  *saved = 0;
+  for (int i = WR0_REGNUM; i <= WR31_REGNUM; i++)
+    if (df_regs_ever_live_p (i) && ! call_used_or_fixed_reg_p (i))
+      {
+	*saved |= 1u << (i - WR0_REGNUM);
+	n++;
+      }
+  return n;
+}
+
+/* Save or restore the wr registers in SAVED at BASE + OFFSET.  */
+
+static void
+v850_fxu_save_restore (unsigned int saved, rtx base, HOST_WIDE_INT offset,
+		       bool save)
+{
+  for (int i = WR0_REGNUM; i <= WR31_REGNUM; i++)
+    if (saved & (1u << (i - WR0_REGNUM)))
+      {
+	rtx addr;
+	rtx reg = gen_rtx_REG (V4SFmode, i);
+	rtx mem;
+	rtx_insn *insn;
+
+	if (offset <= 32752)
+	  addr = plus_constant (Pmode, base, offset);
+	else
+	  {
+	    addr = gen_rtx_REG (Pmode, 12);
+	    emit_move_insn (addr, GEN_INT (offset));
+	    emit_insn (gen_addsi3_clobber_flags (addr, addr, base));
+	  }
+	mem = gen_frame_mem (V4SFmode, addr);
+	set_mem_align (mem, 128);
+	insn = emit_insn (save ? gen_rtx_SET (mem, reg)
+				 : gen_rtx_SET (reg, mem));
+	if (save)
+	  {
+	    mem = gen_frame_mem (V4SFmode, plus_constant (Pmode, base, offset));
+	    RTX_FRAME_RELATED_P (insn) = 1;
+	    add_reg_note (insn, REG_CFA_EXPRESSION, gen_rtx_SET (mem, reg));
+	  }
+	else
+	  v850_epilogue_restore (insn, reg);
+	offset += 16;
+      }
+}
+
+/* Prologue of a frame realigned at run time; r29 keeps the unaligned sp.  */
+
+static void
+v850_expand_realign_prologue (void)
+{
+  long reg_saved = 0;
+  int regsave = compute_register_save_size (&reg_saved);
+  unsigned int fxu_saved;
+  int nfxu = v850_fxu_saved_regs (&fxu_saved);
+  HOST_WIDE_INT locals = v850_realign_locals_size ();
+  rtx save_regs[32];
+  int num_save = 0;
+  int offset;
+
+  if (v850_interrupt_function_p (current_function_decl))
+    sorry ("FXU vectors on the stack of an interrupt function");
+
+  if (flag_stack_usage_info)
+    current_function_static_stack_size
+      = regsave + 16 * nfxu + locals + v850_realign_bytes ();
+
+  for (int i = 1; i < 32; i++)
+    if (((1L << i) & reg_saved) != 0)
+      save_regs[num_save++] = gen_rtx_REG (Pmode, i);
+
+  if (crtl->args.pretend_args_size)
+    increment_stack (- crtl->args.pretend_args_size, true);
+
+  if (stack_realign_drap)
+    emit_move_insn (crtl->drap_reg, stack_pointer_rtx);
+
+  increment_stack (- regsave, true);
+  offset = regsave - 4;
+  if (num_save > 0 && REGNO (save_regs[num_save - 1]) == LINK_POINTER_REGNUM)
+    {
+      F (emit_move_insn (gen_rtx_MEM (SImode,
+				      plus_constant (Pmode, stack_pointer_rtx,
+						     offset)),
+			 save_regs[--num_save]));
+      offset -= 4;
+    }
+  for (int i = 0; i < num_save; i++)
+    {
+      F (emit_move_insn (gen_rtx_MEM (SImode,
+				      plus_constant (Pmode, stack_pointer_rtx,
+						     offset)),
+			 save_regs[i]));
+      offset -= 4;
+    }
+
+  if (stack_realign_drap)
+    {
+      HOST_WIDE_INT slot = 16 * nfxu;
+      rtx s0 = gen_rtx_REG (Pmode, 12);
+      rtx_insn *insn;
+
+      insn = emit_insn (gen_addsi3_clobber_flags (stack_pointer_rtx,
+						  stack_pointer_rtx,
+						  GEN_INT (- (slot + 4))));
+      RTX_FRAME_RELATED_P (insn) = 1;
+      add_reg_note (insn, REG_CFA_DEF_CFA,
+		    plus_constant (Pmode, crtl->drap_reg,
+				   crtl->args.pretend_args_size));
+      emit_insn (gen_fxu_realign_sp (GEN_INT (- v850_realign_bytes ())));
+      insn = emit_insn (gen_addsi3_clobber_flags (s0, crtl->drap_reg,
+						  GEN_INT (- regsave)));
+      RTX_FRAME_RELATED_P (insn) = 1;
+      add_reg_note (insn, REG_CFA_DEF_CFA,
+		    plus_constant (Pmode, s0,
+				   regsave + crtl->args.pretend_args_size));
+      emit_move_insn (hard_frame_pointer_rtx, stack_pointer_rtx);
+      rtx cfa_slot = plus_constant (Pmode, hard_frame_pointer_rtx, slot);
+      insn = emit_move_insn (gen_frame_mem (Pmode, cfa_slot), s0);
+      RTX_FRAME_RELATED_P (insn) = 1;
+      add_reg_note (insn, REG_CFA_DEF_CFA,
+		    plus_constant (Pmode,
+				   gen_frame_mem (Pmode, copy_rtx (cfa_slot)),
+				   regsave + crtl->args.pretend_args_size));
+      v850_fxu_save_restore (fxu_saved, hard_frame_pointer_rtx, 0, true);
+      increment_stack (- v850_realign_locals_size (), false);
+      return;
+    }
+
+  F (emit_move_insn (hard_frame_pointer_rtx, stack_pointer_rtx));
+
+  increment_stack (- (16 * nfxu + locals), false);
+  if (nfxu > 0 || crtl->stack_alignment_needed > STACK_BOUNDARY)
+    emit_insn (gen_fxu_realign_sp (GEN_INT (- v850_realign_bytes ())));
+
+  v850_fxu_save_restore (fxu_saved, stack_pointer_rtx, locals, true);
+}
+
+/* Epilogue of a frame realigned at run time.  */
+
+static void
+v850_expand_realign_epilogue (void)
+{
+  long reg_saved = 0;
+  int regsave = compute_register_save_size (&reg_saved);
+  unsigned int fxu_saved;
+  rtx restore_regs[32];
+  int num_restore = 0;
+  int offset;
+  int cfa = regsave + crtl->args.pretend_args_size;
+  rtx_insn *insn;
+
+  if (stack_realign_drap)
+    {
+      int nfxu = v850_fxu_saved_regs (&fxu_saved);
+      rtx s0 = gen_rtx_REG (Pmode, 12);
+
+      v850_fxu_save_restore (fxu_saved, hard_frame_pointer_rtx, 0, false);
+      rtx slot = plus_constant (Pmode, hard_frame_pointer_rtx, 16 * nfxu);
+      insn = emit_move_insn (s0, gen_frame_mem (Pmode, slot));
+      v850_epilogue_def_cfa (insn, s0, cfa);
+      insn = emit_insn (gen_fxu_restore_sp (s0));
+    }
+  else
+    {
+      v850_fxu_saved_regs (&fxu_saved);
+      v850_fxu_save_restore (fxu_saved, stack_pointer_rtx,
+			     v850_realign_locals_size (), false);
+      insn = emit_insn (gen_fxu_restore_sp (hard_frame_pointer_rtx));
+    }
+  v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+
+  for (int i = 1; i < 32; i++)
+    if (((1L << i) & reg_saved) != 0)
+      restore_regs[num_restore++] = gen_rtx_REG (Pmode, i);
+
+  offset = regsave - 4;
+  if (num_restore > 0
+      && REGNO (restore_regs[num_restore - 1]) == LINK_POINTER_REGNUM)
+    {
+      insn = emit_move_insn (restore_regs[--num_restore],
+			     gen_rtx_MEM (SImode,
+					  plus_constant (Pmode,
+							 stack_pointer_rtx,
+							 offset)));
+      v850_epilogue_restore (insn, restore_regs[num_restore]);
+      offset -= 4;
+    }
+  for (int i = 0; i < num_restore; i++)
+    {
+      insn = emit_move_insn (restore_regs[i],
+			     gen_rtx_MEM (SImode,
+					  plus_constant (Pmode,
+							 stack_pointer_rtx,
+							 offset)));
+      v850_epilogue_restore (insn, restore_regs[i]);
+      emit_use (restore_regs[i]);
+      offset -= 4;
+    }
+
+  insn = increment_stack (cfa, false);
+  v850_epilogue_def_cfa (insn, stack_pointer_rtx, 0);
+  emit_jump_insn (gen_return_internal ());
 }
 
 void
@@ -1626,6 +1992,19 @@ expand_prologue (void)
   int interrupt_handler = v850_interrupt_function_p (current_function_decl);
   long reg_saved = 0;
 
+  if (crtl->stack_realign_needed)
+    {
+      v850_expand_realign_prologue ();
+      return;
+    }
+
+  if (TARGET_FXU)
+    {
+      unsigned int fxu_saved;
+      if (v850_fxu_saved_regs (&fxu_saved) > 0)
+	sorry ("saving FXU registers in a frame that is not realigned");
+    }
+
   actual_fsize = compute_frame_size (size, &reg_saved);
 
   if (flag_stack_usage_info)
@@ -1634,13 +2013,27 @@ expand_prologue (void)
   /* Save/setup global registers for interrupt functions right now.  */
   if (interrupt_handler)
     {
+      static const int isr_regs[] = { EP_REGNUM, 4, 1, 10, 11 };
+      static const int isr_offs[] = { 0, 4, 8, 12, 16 };
+      rtx_insn *insn;
+
       if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP))
-	emit_insn (gen_callt_save_interrupt ());
+	insn = emit_insn (gen_callt_save_interrupt ());
       else
-	emit_insn (gen_save_interrupt ());
+	insn = emit_insn (gen_save_interrupt ());
+      v850_interrupt_frame_note (insn, - INTERRUPT_FIXED_SAVE_SIZE, 5,
+				 isr_regs, isr_offs);
 
       actual_fsize -= INTERRUPT_FIXED_SAVE_SIZE;
       
+      if (v850_interrupt_state ())
+	{
+	  int state = v850_interrupt_state ();
+	  increment_stack (- v850_interrupt_state_size (state), true);
+	  emit_insn (gen_save_interrupt_state (GEN_INT (state)));
+	  actual_fsize -= v850_interrupt_state_size (state);
+	}
+
       if (((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
 	actual_fsize -= INTERRUPT_ALL_SAVE_SIZE;
 
@@ -1722,6 +2115,7 @@ expand_prologue (void)
 	  if (code >= 0)
 	    {
 	      rtx insn = emit_insn (save_all);
+	      F (insn);
 	      INSN_CODE (insn) = code;
 	      actual_fsize -= alloc_stack;
 	      
@@ -1738,10 +2132,16 @@ expand_prologue (void)
       /* Special case interrupt functions that save all registers for a call.  */
       if (interrupt_handler && ((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
 	{
+	  int regs[32], offs[32], n;
+	  rtx_insn *insn;
+
 	  if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP))
-	    emit_insn (gen_callt_save_all_interrupt ());
+	    insn = emit_insn (gen_callt_save_all_interrupt ());
 	  else
-	    emit_insn (gen_save_all_interrupt ());
+	    insn = emit_insn (gen_save_all_interrupt ());
+	  v850_interrupt_save_all_layout (regs, offs, &n);
+	  v850_interrupt_frame_note (insn, - INTERRUPT_ALL_SAVE_SIZE, n, regs,
+				     offs);
 	}
       else
 	{
@@ -1750,7 +2150,7 @@ expand_prologue (void)
 	     register saves.  We use the register save size so we use the ep
 	     register.  */
 	  if (actual_fsize && !CONST_OK_FOR_K (-actual_fsize))
-	    init_stack_alloc = compute_register_save_size (NULL);
+	    init_stack_alloc = 4 * num_save;
 	  else
 	    init_stack_alloc = actual_fsize;
 	      
@@ -1807,18 +2207,32 @@ expand_epilogue (void)
   unsigned int num_restore;
   int code;
   int interrupt_handler = v850_interrupt_function_p (current_function_decl);
+  HOST_WIDE_INT cfa = actual_fsize + crtl->args.pretend_args_size;
+  rtx_insn *insn;
+
+  if (crtl->stack_realign_needed)
+    {
+      v850_expand_realign_epilogue ();
+      v850_interrupt_cache_p = FALSE;
+      v850_interrupt_p = FALSE;
+      return;
+    }
 
   /* Eliminate the initial stack stored by interrupt functions.  */
   if (interrupt_handler)
     {
       actual_fsize -= INTERRUPT_FIXED_SAVE_SIZE;
+      actual_fsize -= v850_interrupt_state_size (v850_interrupt_state ());
       if (((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
 	actual_fsize -= INTERRUPT_ALL_SAVE_SIZE;
     }
 
   /* Cut off any dynamic stack created.  */
   if (frame_pointer_needed)
-    emit_move_insn (stack_pointer_rtx, hard_frame_pointer_rtx);
+    {
+      insn = emit_move_insn (stack_pointer_rtx, hard_frame_pointer_rtx);
+      v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+    }
 
   /* Identify all of the saved registers.  */
   num_restore = 0;
@@ -1868,10 +2282,10 @@ expand_epilogue (void)
 	  
 	  if (code >= 0)
 	    {
-	      rtx insn;
-
 	      actual_fsize -= alloc_stack;
-	      increment_stack (actual_fsize, false);
+	      insn = increment_stack (actual_fsize, false);
+	      v850_epilogue_def_cfa (insn, stack_pointer_rtx,
+				     cfa - actual_fsize);
 
 	      insn = emit_jump_insn (restore_all);
 	      INSN_CODE (insn) = code;
@@ -1888,7 +2302,7 @@ expand_epilogue (void)
       unsigned int init_stack_free;
 
       /* If the stack is large, we need to cut it down in 2 pieces.  */
-      if (interrupt_handler)
+      if (interrupt_handler && ((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
        init_stack_free = 0;
       else if (actual_fsize && !CONST_OK_FOR_K (-actual_fsize))
 	init_stack_free = 4 * num_restore;
@@ -1897,16 +2311,27 @@ expand_epilogue (void)
 
       /* Deallocate the rest of the stack if it is > 32K.  */
       if ((unsigned int) actual_fsize > init_stack_free)
-	increment_stack (actual_fsize - init_stack_free, false);
+	{
+	  insn = increment_stack (actual_fsize - init_stack_free, false);
+	  cfa -= actual_fsize - init_stack_free;
+	  v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+	}
 
       /* Special case interrupt functions that save all registers
 	 for a call.  */
       if (interrupt_handler && ((1L << LINK_POINTER_REGNUM) & reg_saved) != 0)
 	{
+	  int regs[32], offs[32], n;
+
 	  if (! TARGET_DISABLE_CALLT)
-	    emit_insn (gen_callt_restore_all_interrupt ());
+	    insn = emit_insn (gen_callt_restore_all_interrupt ());
 	  else
-	    emit_insn (gen_restore_all_interrupt ());
+	    insn = emit_insn (gen_restore_all_interrupt ());
+	  cfa -= INTERRUPT_ALL_SAVE_SIZE;
+	  v850_interrupt_save_all_layout (regs, offs, &n);
+	  for (i = 0; i < (unsigned int) n; i++)
+	    v850_epilogue_restore (insn, gen_rtx_REG (SImode, regs[i]));
+	  v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
 	}
       else
 	{
@@ -1917,36 +2342,50 @@ expand_epilogue (void)
 	  if (num_restore > 0
 	      && REGNO (restore_regs [num_restore - 1]) == LINK_POINTER_REGNUM)
 	    {
-	      emit_move_insn (restore_regs[--num_restore],
-			      gen_rtx_MEM (SImode,
-					   plus_constant (Pmode,
-							  stack_pointer_rtx,
-							  offset)));
+	      rtx mem = gen_rtx_MEM (SImode, plus_constant (Pmode,
+							    stack_pointer_rtx,
+							    offset));
+	      insn = emit_move_insn (restore_regs[--num_restore], mem);
+	      v850_epilogue_restore (insn, restore_regs[num_restore]);
 	      offset -= 4;
 	    }
 
 	  for (i = 0; i < num_restore; i++)
 	    {
-	      emit_move_insn (restore_regs[i],
-			      gen_rtx_MEM (SImode,
-					   plus_constant (Pmode,
-							  stack_pointer_rtx,
-							  offset)));
+	      rtx mem = gen_rtx_MEM (SImode, plus_constant (Pmode,
+							    stack_pointer_rtx,
+							    offset));
+	      insn = emit_move_insn (restore_regs[i], mem);
+	      v850_epilogue_restore (insn, restore_regs[i]);
 
 	      emit_use (restore_regs[i]);
 	      offset -= 4;
 	    }
 
 	  /* Cut back the remainder of the stack.  */
-	  increment_stack (init_stack_free + crtl->args.pretend_args_size,
-			   false);
+	  insn = increment_stack (init_stack_free
+				  + crtl->args.pretend_args_size, false);
+	  cfa -= init_stack_free + crtl->args.pretend_args_size;
+	  v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
 	}
 
       /* And return or use reti for interrupt handlers.  */
       if (interrupt_handler)
         {
-          if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP))
-            emit_insn (gen_callt_return_interrupt ());
+	  int state = v850_interrupt_state ();
+	  if (state)
+	    {
+	      emit_insn (gen_restore_interrupt_state (GEN_INT (state)));
+	      insn = increment_stack (v850_interrupt_state_size (state), false);
+	      cfa -= v850_interrupt_state_size (state);
+	      v850_epilogue_def_cfa (insn, stack_pointer_rtx, cfa);
+	    }
+	  if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP)
+	      && TARGET_V850E3V5_UP
+	      && v850_interrupt_fe_p (current_function_decl))
+	    emit_insn (gen_callt_return_interrupt_fe ());
+	  else if (! TARGET_DISABLE_CALLT && (TARGET_V850E_UP))
+	    emit_insn (gen_callt_return_interrupt ());
           else
             emit_jump_insn (gen_return_interrupt ());
 	 }
@@ -2000,8 +2439,7 @@ v850_set_data_area (tree decl, v850_data_area data_area)
 /* Handle an "interrupt" attribute; arguments as in
    struct attribute_spec.handler.  */
 static tree
-v850_handle_interrupt_attribute (tree *node, tree name,
-                                 tree args ATTRIBUTE_UNUSED,
+v850_handle_interrupt_attribute (tree *node, tree name, tree args,
                                  int flags ATTRIBUTE_UNUSED,
                                  bool * no_add_attrs)
 {
@@ -2010,6 +2448,27 @@ v850_handle_interrupt_attribute (tree *node, tree name,
       warning (OPT_Wattributes, "%qE attribute only applies to functions",
 	       name);
       *no_add_attrs = true;
+      return NULL_TREE;
+    }
+
+  if (args)
+    {
+      tree arg = TREE_VALUE (args);
+
+      if (! TARGET_V850E3V5_UP)
+	{
+	  error ("the argument of the %qE attribute needs %<-mv850e3v5%> "
+		 "or later", name);
+	  *no_add_attrs = true;
+	}
+      else if (TREE_CODE (arg) != STRING_CST
+	       || (strcmp (TREE_STRING_POINTER (arg), "EI") != 0
+		   && strcmp (TREE_STRING_POINTER (arg), "FE") != 0))
+	{
+	  error ("argument of the %qE attribute is not %qs or %qs", name,
+		 "EI", "FE");
+	  *no_add_attrs = true;
+	}
     }
 
   return NULL_TREE;
@@ -2031,7 +2490,16 @@ v850_handle_data_area_attribute (tree *node, tree name,
   if (is_attribute_p ("sda", name))
     data_area = DATA_AREA_SDA;
   else if (is_attribute_p ("tda", name))
-    data_area = DATA_AREA_TDA;
+    {
+      if (! TARGET_GCC_ABI)
+	{
+	  error ("the %qE attribute is not supported with the RH850 ABI; "
+		 "use %<-mgcc-abi%>", name);
+	  *no_add_attrs = true;
+	  return NULL_TREE;
+	}
+      data_area = DATA_AREA_TDA;
+    }
   else if (is_attribute_p ("zda", name))
     data_area = DATA_AREA_ZDA;
   else
@@ -2102,6 +2570,126 @@ v850_interrupt_function_p (tree func)
 }
 
 
+/* Return true if FUNC is an FE level interrupt function.  */
+
+bool
+v850_interrupt_fe_p (tree func)
+{
+  tree a = lookup_attribute ("interrupt_handler", DECL_ATTRIBUTES (func));
+
+  if (a == NULL_TREE)
+    a = lookup_attribute ("interrupt", DECL_ATTRIBUTES (func));
+  return (a != NULL_TREE && TREE_VALUE (a)
+	  && strcmp (TREE_STRING_POINTER (TREE_VALUE (TREE_VALUE (a))),
+		     "FE") == 0);
+}
+
+/* Return true if the current function uses the FPU.  */
+
+static bool
+v850_function_uses_fpu_p (void)
+{
+  subrtx_iterator::array_type array;
+  bool ret = false;
+
+  push_topmost_sequence ();
+  for (rtx_insn *insn = get_insns (); insn && ! ret; insn = NEXT_INSN (insn))
+    if (NONDEBUG_INSN_P (insn))
+      FOR_EACH_SUBRTX (iter, array, PATTERN (insn), ALL)
+	if (FLOAT_MODE_P (GET_MODE (*iter)))
+	  {
+	    ret = true;
+	    break;
+	  }
+  pop_topmost_sequence ();
+  return ret;
+}
+
+/* RH850 interrupt state to save: 1 EIPC/EIPSW, 2 FPSR/FPEPC, 4 FXSR.  */
+
+int
+v850_interrupt_state (void)
+{
+  int state = 0;
+  bool call_p = df_regs_ever_live_p (LINK_POINTER_REGNUM);
+
+  if (! TARGET_V850E3V5_UP
+      || ! v850_interrupt_function_p (current_function_decl))
+    return 0;
+  if (! v850_interrupt_fe_p (current_function_decl))
+    state |= 1;
+  if (TARGET_USE_FPU && (call_p || v850_function_uses_fpu_p ()))
+    state |= 2;
+  if (TARGET_FXU && call_p)
+    state |= 4;
+  return state;
+}
+
+/* Return the instruction that ends the current interrupt function.  */
+
+const char *
+v850_interrupt_return_insn (void)
+{
+  if (! TARGET_V850E3V5_UP)
+    return "reti";
+  return v850_interrupt_fe_p (current_function_decl) ? "feret" : "eiret";
+}
+
+/* Output the save (SAVE_P) or the restore of the interrupt STATE block.  */
+
+const char *
+v850_output_interrupt_state (int state, bool save_p)
+{
+  static const char *const name[] = { "eipc", "eipsw", "fpsr", "fpepc",
+				      "fxsr" };
+  int reg[5], n = 0, i;
+  char buf[64];
+
+  if (state & 1)
+    {
+      reg[n++] = 0;
+      reg[n++] = 1;
+    }
+  if (state & 2)
+    {
+      reg[n++] = 2;
+      reg[n++] = 3;
+    }
+  if (state & 4)
+    reg[n++] = 4;
+  if (save_p)
+    {
+      for (i = 0; i < n; i++)
+	{
+	  sprintf (buf, "stsr %s, r10", name[reg[i]]);
+	  output_asm_insn (buf, NULL);
+	  sprintf (buf, "st.w r10, %d[sp]", 4 * i);
+	  output_asm_insn (buf, NULL);
+	}
+      return "";
+    }
+  if (state & 2)
+    output_asm_insn ("synce", NULL);
+  if (state & 1)
+    output_asm_insn ("di", NULL);
+  for (i = n - 1; i >= 0; i--)
+    {
+      sprintf (buf, "ld.w %d[sp], r10", 4 * i);
+      output_asm_insn (buf, NULL);
+      sprintf (buf, "ldsr r10, %s", name[reg[i]]);
+      output_asm_insn (buf, NULL);
+    }
+  return "";
+}
+
+/* Return the size of the interrupt state block for STATE.  */
+
+int
+v850_interrupt_state_size (int state)
+{
+  return ((state & 1) ? 8 : 0) + ((state & 2) ? 8 : 0) + ((state & 4) ? 4 : 0);
+}
+
 static void
 v850_encode_data_area (tree decl, rtx symbol)
 {
@@ -2508,9 +3096,7 @@ v850_insert_attributes (tree decl, tree * attr_ptr ATTRIBUTE_UNUSED )
     }
   
   if (current_function_decl == NULL_TREE
-      && (VAR_P (decl)
-	  || TREE_CODE (decl) == CONST_DECL
-	  || TREE_CODE (decl) == FUNCTION_DECL)
+      && (VAR_P (decl) || TREE_CODE (decl) == FUNCTION_DECL)
       && (!DECL_EXTERNAL (decl) || DECL_INITIAL (decl))
       && !DECL_SECTION_NAME (decl))
     {
@@ -2706,6 +3292,7 @@ construct_prepare_instruction (rtx op)
   int		     i;
   static char        buff[ 120 ]; /* XXX */
   int		     use_callt = 0;
+  unsigned long int  full;
   
   if (XVECLEN (op, 0) <= 1)
     {
@@ -2754,18 +3341,21 @@ construct_prepare_instruction (rtx op)
 
   stack_bytes += count * 4;
 
+  for (i = 20; i < 32; i++)
+    if (mask & (1 << i))
+      break;
+  full = i < 30 ? (1UL << 30) - (1UL << i) : 0;
+
   if ((! TARGET_DISABLE_CALLT)
-      && (use_callt || stack_bytes == 0))
+      && (use_callt
+	  || (stack_bytes == 0 && (mask & (1UL << 30)) == 0
+	      && (mask & 0x3fffffff) == full)))
     {
       if (use_callt)
 	{
 	  sprintf (buff, "callt ctoff(__callt_save_r2_r%d)", (mask & (1 << 31)) ? 31 : 29 );
 	  return buff;
 	}
-      
-      for (i = 20; i < 32; i++)
-	if (mask & (1 << i))
-	  break;
 
       if (i == 31)
 	sprintf (buff, "callt ctoff(__callt_save_r31c)");
@@ -2934,9 +3524,121 @@ v850_libcall_value (machine_mode mode,
 /* Worker function for TARGET_CAN_ELIMINATE.  */
 
 static bool
-v850_can_eliminate (const int from ATTRIBUTE_UNUSED, const int to)
+v850_can_eliminate (const int from, const int to)
 {
+  if (stack_realign_drap)
+    return from == FRAME_POINTER_REGNUM && to == HARD_FRAME_POINTER_REGNUM;
+  if (stack_realign_fp)
+    return ((from == ARG_POINTER_REGNUM && to == HARD_FRAME_POINTER_REGNUM)
+	    || (from == FRAME_POINTER_REGNUM && to == STACK_POINTER_REGNUM));
+
   return (to == STACK_POINTER_REGNUM ? ! frame_pointer_needed : true);
+}
+
+HOST_WIDE_INT
+v850_initial_elimination_offset (int from, int to)
+{
+  if (stack_realign_drap)
+    return 0;
+  if (stack_realign_fp)
+    {
+      if (from == FRAME_POINTER_REGNUM && to == STACK_POINTER_REGNUM)
+	return v850_realign_locals_size ();
+      if (from == ARG_POINTER_REGNUM && to == HARD_FRAME_POINTER_REGNUM)
+	return compute_register_save_size (NULL);
+      return 0;
+    }
+
+  if (from == FRAME_POINTER_REGNUM)
+    return get_frame_size () + crtl->outgoing_args_size;
+  if (from == ARG_POINTER_REGNUM)
+    return compute_frame_size (get_frame_size (), (long *) 0);
+  gcc_unreachable ();
+}
+
+/* Implement TARGET_MD_ASM_ADJUST: an asm using wr needs a realigned frame.  */
+
+static rtx_insn *
+v850_md_asm_adjust (vec<rtx> &, vec<rtx> &, vec<machine_mode> &,
+		    vec<const char *> &constraints, vec<rtx> &, vec<rtx> &,
+		    HARD_REG_SET &clobbered_regs, location_t)
+{
+  bool fxu = false;
+
+  if (! TARGET_FXU)
+    return NULL;
+  for (int i = WR0_REGNUM; i <= WR31_REGNUM; i++)
+    if (TEST_HARD_REG_BIT (clobbered_regs, i))
+      fxu = true;
+  for (unsigned int i = 0; i < constraints.length (); i++)
+    if (strchr (constraints[i], 'w'))
+      fxu = true;
+  if (fxu && ! crtl->stack_realign_processed
+      && crtl->stack_alignment_estimated < V850_FXU_ALIGNMENT)
+    crtl->stack_alignment_estimated = V850_FXU_ALIGNMENT;
+  return NULL;
+}
+
+/* Implement TARGET_UPDATE_STACK_BOUNDARY: a nonlocal label saves every wr.  */
+
+static void
+v850_update_stack_boundary (void)
+{
+  if (TARGET_FXU && cfun->has_nonlocal_label
+      && crtl->stack_alignment_estimated < V850_FXU_ALIGNMENT)
+    crtl->stack_alignment_estimated = V850_FXU_ALIGNMENT;
+}
+
+/* Return true if the body changes sp other than by the prologue, or uses
+   the CFA through the argument pointer when OF_CFA.  */
+
+static bool
+v850_body_uses_p (bool of_cfa)
+{
+  for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    if (NONDEBUG_INSN_P (insn)
+	&& (of_cfa ? reg_mentioned_p (virtual_cfa_rtx, PATTERN (insn))
+		   : reg_set_p (stack_pointer_rtx, insn)))
+      return true;
+  return false;
+}
+
+/* Implement TARGET_GET_DRAP_RTX.  */
+
+static rtx
+v850_get_drap_rtx (void)
+{
+  rtx drap_vreg;
+  rtx_insn *seq, *insn;
+
+  if (! (crtl->stack_realign_needed && crtl->need_drap))
+    return NULL_RTX;
+
+  if (! cfun->calls_alloca && ! v850_body_uses_p (false))
+    {
+      crtl->need_drap = false;
+      return NULL_RTX;
+    }
+
+  if (v850_body_uses_p (true))
+    {
+      sorry ("the frame address of a realigned frame with a dynamic stack");
+      crtl->need_drap = false;
+      return NULL_RTX;
+    }
+
+  crtl->drap_reg = gen_rtx_REG (Pmode, V850_DRAP_REGNUM);
+  start_sequence ();
+  drap_vreg = copy_to_reg (crtl->drap_reg);
+  seq = get_insns ();
+  end_sequence ();
+  insn = emit_insn_before (seq, NEXT_INSN (entry_of_function ()));
+  if (! optimize)
+    {
+      add_reg_note (insn, REG_CFA_SET_VDRAP, drap_vreg);
+      RTX_FRAME_RELATED_P (insn) = 1;
+    }
+  return drap_vreg;
 }
 
 /* Worker function for TARGET_CONDITIONAL_REGISTER_USAGE.
@@ -2952,6 +3654,10 @@ v850_conditional_register_usage (void)
      fixed_regs[2] = 0;  call_used_regs[2] = 0;
      fixed_regs[5] = 0;  call_used_regs[5] = 1;
     }
+
+  if (! TARGET_FXU)
+    for (int i = WR0_REGNUM; i <= WR31_REGNUM; i++)
+      fixed_regs[i] = call_used_regs[i] = 1;
 }
 
 /* Worker function for TARGET_ASM_TRAMPOLINE_TEMPLATE.  */
@@ -3003,6 +3709,16 @@ v850_legitimate_constant_p (machine_mode mode ATTRIBUTE_UNUSED, rtx x)
 	       && !CONST_OK_FOR_K (INTVAL (XEXP (XEXP (x, 0), 1)))));
 }
 
+/* Return true if X is a ZDA symbol, possibly plus an offset.  */
+
+static bool
+v850_zda_symbol_p (rtx x)
+{
+  if (GET_CODE (x) == CONST && GET_CODE (XEXP (x, 0)) == PLUS)
+    x = XEXP (XEXP (x, 0), 0);
+  return GET_CODE (x) == SYMBOL_REF && SYMBOL_REF_ZDA_P (x);
+}
+
 /* Helper function for `v850_legitimate_address_p'.  */
 
 static bool
@@ -3051,7 +3767,8 @@ v850_legitimate_address_p (machine_mode mode, rtx x, bool strict_p,
       && GET_MODE_SIZE (mode) <= GET_MODE_SIZE (word_mode))
     return true;
   if (special_symbolref_operand (x, mode)
-      && (GET_MODE_SIZE (mode) <= GET_MODE_SIZE (word_mode)))
+      && (GET_MODE_SIZE (mode) <= GET_MODE_SIZE (word_mode))
+      && (TARGET_GCC_ABI || ! v850_zda_symbol_p (x)))
     return true;
   if (GET_CODE (x) == PLUS
       && v850_rtx_ok_for_base_p (XEXP (x, 0), strict_p)
@@ -3118,9 +3835,9 @@ TARGET_GNU_ATTRIBUTES (v850_attribute_table,
 {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
        affects_type_identity, handler, exclude } */
-  { "interrupt_handler", 0, 0, true,  false, false, false,
+  { "interrupt_handler", 0, 1, true,  false, false, false,
     v850_handle_interrupt_attribute, NULL },
-  { "interrupt",         0, 0, true,  false, false, false,
+  { "interrupt",	 0, 1, true,  false, false, false,
     v850_handle_interrupt_attribute, NULL },
   { "sda",               0, 0, true,  false, false, false,
     v850_handle_data_area_attribute, NULL },
@@ -3139,6 +3856,30 @@ v850_option_override (void)
   /* The RH850 ABI does not (currently) support the use of the CALLT instruction.  */
   if (! TARGET_GCC_ABI)
     target_flags |= MASK_DISABLE_CALLT;
+
+  if (! TARGET_GCC_ABI && TARGET_EP)
+    error ("%<-mep%> is not supported with the RH850 ABI; use %<-mgcc-abi%>");
+  if (! TARGET_GCC_ABI && small_memory_max[(int) SMALL_MEMORY_TDA] > 0)
+    error ("%<-mtda%> is not supported with the RH850 ABI; use %<-mgcc-abi%>");
+
+  if (TARGET_FXU)
+    target_flags |= MASK_G4MH2;
+
+  if (TARGET_G4MH2)
+    {
+      target_flags |= MASK_G4;
+      if (global_options_set.x_target_flags & MASK_NO_STRICT_ALIGN
+	  && TARGET_NO_STRICT_ALIGN)
+	error ("%<-mno-strict-align%> is not supported with %<-mg4mh2%>");
+      target_flags &= ~MASK_NO_STRICT_ALIGN;
+    }
+
+  if (TARGET_G4 && ! TARGET_V850E3V5)
+    {
+      if (target_flags & MASK_CPU)
+	error ("%<-mg4%> requires %<-mv850e3v5%>");
+      target_flags |= MASK_V850E3V5;
+    }
 
   /* Save the initial options in case the user does function specific
      options.  */
@@ -3185,7 +3926,542 @@ v850_gen_movdi (rtx * operands)
 static bool
 v850_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
 {
+  if (FXU_REGNO_P (regno))
+    return mode == V4SFmode || mode == V4SImode;
+  if (mode == V4SFmode || mode == V4SImode)
+    return false;
   return GET_MODE_SIZE (mode) <= 4 || ((regno & 1) == 0 && regno != 0);
+}
+
+/* Implement TARGET_HARD_REGNO_NREGS.  */
+
+static unsigned int
+v850_hard_regno_nregs (unsigned int regno, machine_mode mode)
+{
+  if (FXU_REGNO_P (regno))
+    return 1;
+  return CEIL (GET_MODE_SIZE (mode), UNITS_PER_WORD);
+}
+
+/* Implement TARGET_CLASS_MAX_NREGS.  */
+
+static unsigned char
+v850_class_max_nregs (reg_class_t rclass, machine_mode mode)
+{
+  if (rclass == FXU_REGS)
+    return 1;
+  return CEIL (GET_MODE_SIZE (mode), UNITS_PER_WORD);
+}
+
+/* Implement TARGET_CAN_CHANGE_MODE_CLASS.  */
+
+static bool
+v850_can_change_mode_class (machine_mode from, machine_mode to,
+			    reg_class_t rclass)
+{
+  if (reg_classes_intersect_p (rclass, FXU_REGS))
+    return GET_MODE_SIZE (from) == GET_MODE_SIZE (to);
+  return true;
+}
+
+/* Implement TARGET_VECTOR_MODE_SUPPORTED_P.  */
+
+static bool
+v850_vector_mode_supported_p (machine_mode mode)
+{
+  return TARGET_FXU && (mode == V4SFmode || mode == V4SImode);
+}
+
+/* Implement TARGET_VECTORIZE_PREFERRED_SIMD_MODE.  */
+
+static machine_mode
+v850_preferred_simd_mode (scalar_mode mode)
+{
+  return (TARGET_FXU && mode == SFmode && ! flag_rounding_math
+	  ? V4SFmode : word_mode);
+}
+
+/* Implement TARGET_SECONDARY_MEMORY_NEEDED.  */
+
+static bool
+v850_secondary_memory_needed (machine_mode, reg_class_t class1,
+			      reg_class_t class2)
+{
+  return (reg_classes_intersect_p (class1, FXU_REGS)
+	  != reg_classes_intersect_p (class2, FXU_REGS));
+}
+
+/* Implement TARGET_REGISTER_MOVE_COST.  */
+
+static int
+v850_register_move_cost (machine_mode, reg_class_t from, reg_class_t to)
+{
+  if (reg_classes_intersect_p (from, FXU_REGS)
+      != reg_classes_intersect_p (to, FXU_REGS))
+    return 20;
+  return 2;
+}
+
+/* Return true if X is a base register plus a disp16 multiple of SIZE.  */
+
+bool
+v850_fxu_mem_p (rtx x, int size, bool strict)
+{
+  rtx addr;
+  HOST_WIDE_INT disp = 0;
+
+  if (! MEM_P (x))
+    return false;
+  addr = XEXP (x, 0);
+  if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1)))
+    {
+      disp = INTVAL (XEXP (addr, 1));
+      addr = XEXP (addr, 0);
+    }
+  if (! v850_rtx_ok_for_base_p (addr, strict))
+    return false;
+  return (disp % size == 0 && disp >= -32768 && disp <= 32767);
+}
+
+/* Return MEM with an address that the FXU instructions accept.  */
+
+static rtx
+v850_fxu_legitimize_mem (rtx mem, int size)
+{
+  if (v850_fxu_mem_p (mem, size, false))
+    return mem;
+  return replace_equiv_address (mem, force_reg (Pmode, XEXP (mem, 0)));
+}
+
+/* Ask for a realigned frame, as a wr register may need saving.  */
+
+static void
+v850_fxu_need_realign (void)
+{
+  if (! crtl->stack_realign_processed
+      && crtl->stack_alignment_estimated < V850_FXU_ALIGNMENT)
+    crtl->stack_alignment_estimated = V850_FXU_ALIGNMENT;
+}
+
+/* Expand an FXU move with memory below 16-byte alignment.  */
+
+void
+v850_expand_fxu_misaligned_move (rtx dst, rtx src)
+{
+  machine_mode mode = GET_MODE (dst);
+  rtx mem = MEM_P (src) ? src : dst;
+
+  if (! MEM_P (mem) || (MEM_P (src) && MEM_P (dst)))
+    {
+      emit_move_insn (dst, force_reg (mode, src));
+      return;
+    }
+
+  if (MEM_ALIGN (mem) < BITS_PER_WORD)
+    {
+      rtx tmp = assign_stack_temp (mode, GET_MODE_SIZE (mode));
+
+      if (MEM_P (src))
+	{
+	  emit_block_move (tmp, src, GEN_INT (GET_MODE_SIZE (mode)),
+			   BLOCK_OP_NORMAL);
+	  emit_move_insn (dst, tmp);
+	}
+      else
+	{
+	  emit_move_insn (tmp, src);
+	  emit_block_move (dst, tmp, GEN_INT (GET_MODE_SIZE (mode)),
+			   BLOCK_OP_NORMAL);
+	}
+      return;
+    }
+
+  rtx base = force_reg (Pmode, XEXP (mem, 0));
+  rtx lo = gen_rtx_MEM (DImode, base);
+  rtx hi = gen_rtx_MEM (DImode, plus_constant (Pmode, base, 8));
+
+  if (MEM_P (src))
+    {
+      rtx reg = REG_P (dst) ? dst : gen_reg_rtx (mode);
+      emit_insn (gen_fxu_ldv_dw_both (mode, reg, lo));
+      emit_insn (gen_fxu_ldv_dw (mode, reg, reg, hi, GEN_INT (2)));
+      if (reg != dst)
+	emit_move_insn (dst, reg);
+    }
+  else
+    {
+      if (! REG_P (src))
+	src = force_reg (mode, src);
+      emit_insn (gen_fxu_stv_dw (mode, lo, src, GEN_INT (0)));
+      emit_insn (gen_fxu_stv_dw (mode, hi, src, GEN_INT (1)));
+    }
+}
+
+/* Expand a move of an FXU vector.  Return true if it was done here.  */
+
+bool
+v850_expand_fxu_move (rtx dst, rtx src)
+{
+  machine_mode mode = GET_MODE (dst);
+
+  if (! can_create_pseudo_p ())
+    return false;
+
+  v850_fxu_need_realign ();
+
+  if (MEM_P (dst) && ! register_operand (src, mode))
+    src = force_reg (mode, src);
+
+  if (CONSTANT_P (src))
+    src = force_const_mem (mode, src);
+
+  if ((MEM_P (src) && MEM_ALIGN (src) < 128)
+      || (MEM_P (dst) && MEM_ALIGN (dst) < 128))
+    {
+      v850_expand_fxu_misaligned_move (dst, src);
+      return true;
+    }
+
+  if (MEM_P (src))
+    src = v850_fxu_legitimize_mem (src, 16);
+  if (MEM_P (dst))
+    dst = v850_fxu_legitimize_mem (dst, 16);
+  emit_insn (gen_rtx_SET (dst, src));
+  return true;
+}
+
+/* Return the exact CMPF.S4 fcond for CODE (swap, invert), or -1.  */
+
+int
+v850_fxu_fcond (enum rtx_code code, bool *swap, bool *invert)
+{
+  bool s = false, i = false;
+  int fc;
+
+  if (HONOR_SNANS (SFmode))
+    return -1;
+  switch (code)
+    {
+    case EQ: fc = 2; break;
+    case NE: fc = 2; i = true; break;
+    case UNORDERED: fc = 1; break;
+    case ORDERED: fc = 1; i = true; break;
+    case UNEQ: fc = 3; break;
+    case UNLT: fc = 5; break;
+    case UNLE: fc = 7; break;
+    case UNGT: fc = 5; s = true; break;
+    case UNGE: fc = 7; s = true; break;
+    case LT: fc = 4; break;
+    case LE: fc = 6; break;
+    case GT: fc = 4; s = true; break;
+    case GE: fc = 6; s = true; break;
+    case LTGT: fc = 3; i = true; break;
+    default: return -1;
+    }
+  if (flag_trapping_math
+      && (code == LT || code == LE || code == GT || code == GE
+	  || code == LTGT))
+    return -1;
+  if (swap)
+    *swap = s;
+  if (invert)
+    *invert = i;
+  return fc;
+}
+
+/* Emit CMPF.S4 for A CODE B; *INVERT is set if it holds the inverse.  */
+
+static rtx
+v850_emit_fxu_cmpf (enum rtx_code code, rtx a, rtx b, bool *invert)
+{
+  bool swap;
+  int fc = v850_fxu_fcond (code, &swap, invert);
+  rtx dst = gen_reg_rtx (V4SImode);
+
+  gcc_assert (fc >= 0);
+  a = force_reg (V4SFmode, a);
+  b = force_reg (V4SFmode, b);
+  if (swap)
+    std::swap (a, b);
+  emit_insn (gen_fxu_cmpf (dst, a, b, GEN_INT (fc)));
+  return dst;
+}
+
+/* Expand vec_cmp: DST = A CODE B.  */
+
+void
+v850_expand_fxu_vec_cmp (rtx dst, enum rtx_code code, rtx a, rtx b)
+{
+  bool invert;
+  rtx m = v850_emit_fxu_cmpf (code, a, b, &invert);
+
+  if (invert)
+    emit_insn (gen_fxu_cmovf (V4SImode, dst, m,
+			      force_reg (V4SImode, CONST0_RTX (V4SImode)),
+			      force_reg (V4SImode, CONSTM1_RTX (V4SImode))));
+  else
+    emit_move_insn (dst, m);
+}
+
+/* Expand vcond: DST = A CODE B ? T : F.  */
+
+void
+v850_expand_fxu_vcond (rtx dst, rtx t, rtx f, enum rtx_code code, rtx a,
+		       rtx b)
+{
+  machine_mode mode = GET_MODE (dst);
+  bool invert;
+  rtx m = v850_emit_fxu_cmpf (code, a, b, &invert);
+
+  if (invert)
+    std::swap (t, f);
+  emit_insn (gen_fxu_cmovf (mode, dst, m, force_reg (mode, t),
+			    force_reg (mode, f)));
+}
+
+/* Return a 4-aligned SImode MEM that holds the scalar X.  */
+
+static rtx
+v850_fxu_scalar_mem (rtx x)
+{
+  machine_mode mode = GET_MODE (x) == VOIDmode ? SImode : GET_MODE (x);
+
+  if (! MEM_P (x) || MEM_ALIGN (x) < 32 || MEM_VOLATILE_P (x))
+    {
+      rtx tmp = assign_stack_temp (mode, 4);
+      emit_move_insn (tmp, MEM_P (x) ? force_reg (mode, x) : x);
+      x = tmp;
+    }
+  return adjust_address (v850_fxu_legitimize_mem (x, 4), SImode, 0);
+}
+
+/* Expand vec_duplicate: all lanes of DST = X.  */
+
+void
+v850_expand_fxu_dup (rtx dst, rtx x)
+{
+  machine_mode mode = GET_MODE (dst);
+  rtx mem = v850_fxu_scalar_mem (x);
+
+  mem = adjust_address (mem, GET_MODE_INNER (mode), 0);
+  emit_insn (gen_fxu_ldv_w_dup (mode, dst, mem));
+}
+
+/* Expand vec_set: lane LANE of VEC = X.  */
+
+void
+v850_expand_fxu_set (rtx vec, rtx x, int lane)
+{
+  rtx mem = v850_fxu_scalar_mem (x);
+
+  emit_insn (gen_fxu_ldv_w (GET_MODE (vec), vec, vec, mem,
+			    GEN_INT (1 << lane)));
+}
+
+/* Expand vec_extract: DST = lane LANE of VEC.  */
+
+void
+v850_expand_fxu_extract (rtx dst, rtx vec, int lane)
+{
+  machine_mode mode = GET_MODE (dst);
+  bool direct = MEM_P (dst) && MEM_ALIGN (dst) >= 32 && ! MEM_VOLATILE_P (dst);
+  rtx mem = direct ? dst : assign_stack_temp (mode, 4);
+
+  mem = adjust_address (v850_fxu_legitimize_mem (mem, 4), SImode, 0);
+  emit_insn (gen_fxu_stv_w (GET_MODE (vec), mem, vec, GEN_INT (lane)));
+  if (! direct)
+    emit_move_insn (dst, adjust_address (mem, mode, 0));
+}
+
+/* Expand vec_init: DST = the elements of the PARALLEL VALS.  */
+
+void
+v850_expand_fxu_init (rtx dst, rtx vals)
+{
+  machine_mode mode = GET_MODE (dst);
+  int i, n = XVECLEN (vals, 0);
+  bool same = true, cst = true;
+
+  for (i = 0; i < n; i++)
+    {
+      rtx x = XVECEXP (vals, 0, i);
+      same &= rtx_equal_p (x, XVECEXP (vals, 0, 0));
+      cst &= CONST_INT_P (x) || CONST_DOUBLE_P (x);
+    }
+  if (cst)
+    {
+      emit_move_insn (dst, gen_rtx_CONST_VECTOR (mode, XVEC (vals, 0)));
+      return;
+    }
+  if (same)
+    {
+      v850_expand_fxu_dup (dst, XVECEXP (vals, 0, 0));
+      return;
+    }
+  rtx mem = assign_stack_temp (mode, GET_MODE_SIZE (mode));
+  for (i = 0; i < n; i++)
+    emit_move_insn (adjust_address (mem, GET_MODE_INNER (mode),
+				    i * GET_MODE_UNIT_SIZE (mode)),
+		    XVECEXP (vals, 0, i));
+  emit_move_insn (dst, mem);
+}
+
+/* Expand reduc_<CODE>_scal_v4sf: DST = CODE over the lanes of V.  */
+
+void
+v850_expand_fxu_reduc (rtx dst, rtx v, int code)
+{
+  rtx t = gen_reg_rtx (V4SFmode);
+  rtx s = gen_reg_rtx (V4SFmode);
+  rtx u = gen_reg_rtx (V4SFmode);
+
+  v = force_reg (V4SFmode, v);
+  switch (code)
+    {
+    case UNSPEC_FXU_ADDRF:
+      emit_insn (gen_fxu_addrf (t, v, v));
+      emit_insn (gen_fxu_shflv (V4SFmode, s, t, t, GEN_INT (2)));
+      emit_insn (gen_addv4sf3 (u, t, s));
+      break;
+    case SMAX:
+    case UNSPEC_FXU_FMAX:
+      emit_insn (gen_fxu_maxrf (t, v, v));
+      emit_insn (gen_fxu_shflv (V4SFmode, s, t, t, GEN_INT (2)));
+      emit_insn (code == SMAX ? gen_smaxv4sf3 (u, t, s)
+				: gen_fmaxv4sf3 (u, t, s));
+      break;
+    case SMIN:
+    case UNSPEC_FXU_FMIN:
+      emit_insn (gen_fxu_minrf (t, v, v));
+      emit_insn (gen_fxu_shflv (V4SFmode, s, t, t, GEN_INT (2)));
+      emit_insn (code == SMIN ? gen_sminv4sf3 (u, t, s)
+				: gen_fminv4sf3 (u, t, s));
+      break;
+    default:
+      gcc_unreachable ();
+    }
+  v850_expand_fxu_extract (dst, u, 0);
+}
+
+/* Implement TARGET_VECTORIZE_BUILTIN_VECTORIZATION_COST.  */
+
+static int
+v850_builtin_vectorization_cost (enum vect_cost_for_stmt kind, tree vectype,
+				 int misalign)
+{
+  if (vectype && TYPE_MODE (vectype) != V4SFmode
+      && TYPE_MODE (vectype) != V4SImode)
+    return default_builtin_vectorization_cost (kind, vectype, misalign);
+  switch (kind)
+    {
+    case vector_stmt:
+    case vec_promote_demote:
+    case unaligned_load:
+    case unaligned_store:
+    case vec_to_scalar:
+    case scalar_to_vec:
+      return 2;
+    case vec_construct:
+      return TYPE_VECTOR_SUBPARTS (vectype).to_constant () + 1;
+    case cond_branch_taken:
+      return 3;
+    default:
+      return 1;
+    }
+}
+
+class v850_vector_costs : public vector_costs
+{
+public:
+  using vector_costs::vector_costs;
+
+  unsigned int add_stmt_cost (int count, vect_cost_for_stmt kind,
+			      stmt_vec_info stmt_info, slp_tree node,
+			      tree vectype, int misalign,
+			      vect_cost_model_location where) override;
+  void finish_cost (const vector_costs *scalar_costs) override;
+
+private:
+  unsigned int m_wr = 0;
+};
+
+unsigned int
+v850_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
+				  stmt_vec_info stmt_info, slp_tree node,
+				  tree vectype, int misalign,
+				  vect_cost_model_location where)
+{
+  unsigned int cost;
+
+  if (m_vinfo->vector_mode != V4SFmode && m_vinfo->vector_mode != V4SImode)
+    return vector_costs::add_stmt_cost (count, kind, stmt_info, node, vectype,
+					misalign, where);
+  cost = v850_builtin_vectorization_cost (kind, vectype, misalign) * count;
+
+  if (! m_costing_for_scalar && where == vect_body
+      && (kind == vector_load || kind == unaligned_load
+	  || kind == vec_construct || kind == scalar_to_vec))
+    m_wr += count;
+  return record_stmt_cost (stmt_info, where, cost);
+}
+
+/* Add the loop control of a loop that is not unrolled completely, and
+   the save, restore and realignment for the callee-saved wr registers.  */
+
+void
+v850_vector_costs::finish_cost (const vector_costs *scalar_costs)
+{
+  loop_vec_info loop_vinfo = dyn_cast<loop_vec_info> (m_vinfo);
+
+  if (m_vinfo->vector_mode != V4SFmode && m_vinfo->vector_mode != V4SImode)
+    {
+      vector_costs::finish_cost (scalar_costs);
+      return;
+    }
+  if (loop_vinfo
+      && ! (LOOP_VINFO_NITERS_KNOWN_P (loop_vinfo)
+	    && LOOP_VINFO_INT_NITERS (loop_vinfo) <= 16))
+    m_costs[vect_body] += 3;
+  if (! m_costing_for_scalar)
+    {
+      unsigned int n = MIN (MAX (m_wr, 2U), 32U);
+      m_costs[vect_prologue] += n + 6;
+      m_costs[vect_epilogue] += n + 3;
+    }
+  vector_costs::finish_cost (scalar_costs);
+}
+
+/* Implement TARGET_VECTORIZE_CREATE_COSTS.  */
+
+static vector_costs *
+v850_vectorize_create_costs (vec_info *vinfo, bool costing_for_scalar)
+{
+  return new v850_vector_costs (vinfo, costing_for_scalar);
+}
+
+/* Implement TARGET_VECTORIZE_VEC_PERM_CONST with SHFLV.W4.  */
+
+static bool
+v850_vectorize_vec_perm_const (machine_mode mode, machine_mode op_mode,
+			       rtx target, rtx op0, rtx op1,
+			       const vec_perm_indices &sel)
+{
+  unsigned int i, imm = 0;
+
+  if (! TARGET_FXU || mode != op_mode
+      || (mode != V4SFmode && mode != V4SImode))
+    return false;
+  if (! target)
+    return true;
+  for (i = 0; i < 4; i++)
+    imm |= (sel[i].to_constant () & 7) << (3 * i);
+  op0 = force_reg (mode, op0);
+  op1 = op1 == NULL_RTX ? op0 : force_reg (mode, op1);
+  rtx dst = register_operand (target, mode) ? target : gen_reg_rtx (mode);
+  emit_insn (gen_fxu_shflv (mode, dst, op0, op1, GEN_INT (imm)));
+  if (dst != target)
+    emit_move_insn (target, dst);
+  return true;
 }
 
 /* Implement TARGET_MODES_TIEABLE_P.  */
@@ -3194,7 +4470,9 @@ static bool
 v850_modes_tieable_p (machine_mode mode1, machine_mode mode2)
 {
   return (mode1 == mode2
-	  || (GET_MODE_SIZE (mode1) <= 4 && GET_MODE_SIZE (mode2) <= 4));
+	  || (GET_MODE_SIZE (mode1) <= 4 && GET_MODE_SIZE (mode2) <= 4)
+	  || ((mode1 == V4SFmode || mode1 == V4SImode)
+	      && (mode2 == V4SFmode || mode2 == V4SImode)));
 }
 
 static bool
@@ -3220,6 +4498,335 @@ v850_can_inline_p (tree caller, tree callee)
 }
 
 
+/* FXU builtins.  */
+
+enum v850_fxu_ftype
+{
+  FXU_V4SF_V4SF,
+  FXU_V4SF_V4SF_V4SF,
+  FXU_V4SF_V4SF_V4SF_V4SF,
+  FXU_V4SI_V4SF,
+  FXU_V4SF_V4SI,
+  FXU_V4SI_V4SF_V4SF_INT,
+  FXU_V4SF_V4SI_V4SF_V4SF,
+  FXU_V4SI_V4SI_V4SI_V4SI,
+  FXU_V4SF_V4SF_V4SF_INT,
+  FXU_V4SI_V4SI_V4SI_INT,
+  FXU_V4SF_V4SF_INT,
+  FXU_INT_V4SI_INT,
+  FXU_V4SF_V4SF_PCVOID_INT,
+  FXU_V4SF_PCVOID,
+  FXU_V4SI_PCVOID,
+  FXU_VOID_PVOID_V4SF_INT,
+  FXU_VOID_PVOID_V4SF,
+  FXU_VOID_PVOID_V4SI
+};
+
+enum v850_fxu_kind { FXU_OP, FXU_LOAD, FXU_STORE };
+
+struct v850_fxu_builtin
+{
+  const char *name;
+  enum insn_code icode;
+  enum v850_fxu_ftype ftype;
+  enum v850_fxu_kind kind;
+  machine_mode mem_mode;
+  int imm_max;
+};
+
+static const struct v850_fxu_builtin v850_fxu_builtins[] =
+{
+  { "addf_s4", CODE_FOR_addv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "subf_s4", CODE_FOR_subv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "mulf_s4", CODE_FOR_mulv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "divf_s4", CODE_FOR_divv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "maxf_s4", CODE_FOR_smaxv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "minf_s4", CODE_FOR_sminv4sf3, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "absf_s4", CODE_FOR_absv4sf2, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "negf_s4", CODE_FOR_negv4sf2, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "sqrtf_s4", CODE_FOR_sqrtv4sf2, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "recipf_s4", CODE_FOR_fxu_recipf, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "rsqrtf_s4", CODE_FOR_fxu_rsqrtf, FXU_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "fmaf_s4", CODE_FOR_fmav4sf4, FXU_V4SF_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "fmsf_s4", CODE_FOR_fmsv4sf4, FXU_V4SF_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "fnmaf_s4", CODE_FOR_fxu_fnmaf, FXU_V4SF_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "fnmsf_s4", CODE_FOR_fxu_fnmsf, FXU_V4SF_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addsubf_s4", CODE_FOR_fxu_addsubf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addsubnf_s4", CODE_FOR_fxu_addsubnf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "subaddf_s4", CODE_FOR_fxu_subaddf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "subaddnf_s4", CODE_FOR_fxu_subaddnf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addxf_s4", CODE_FOR_fxu_addxf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "subxf_s4", CODE_FOR_fxu_subxf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "mulxf_s4", CODE_FOR_fxu_mulxf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "addsubxf_s4", CODE_FOR_fxu_addsubxf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addsubnxf_s4", CODE_FOR_fxu_addsubnxf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "subaddxf_s4", CODE_FOR_fxu_subaddxf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "subaddnxf_s4", CODE_FOR_fxu_subaddnxf, FXU_V4SF_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "addrf_s4", CODE_FOR_fxu_addrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "subrf_s4", CODE_FOR_fxu_subrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "mulrf_s4", CODE_FOR_fxu_mulrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "maxrf_s4", CODE_FOR_fxu_maxrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "minrf_s4", CODE_FOR_fxu_minrf, FXU_V4SF_V4SF_V4SF, FXU_OP, VOIDmode, -1 },
+  { "ceilf_sw4", CODE_FOR_fxu_ceilf_sw4, FXU_V4SI_V4SF, FXU_OP, VOIDmode, -1 },
+  { "ceilf_suw4", CODE_FOR_fxu_ceilf_suw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "floorf_sw4", CODE_FOR_fxu_floorf_sw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "floorf_suw4", CODE_FOR_fxu_floorf_suw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "roundf_sw4", CODE_FOR_fxu_roundf_sw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "roundf_suw4", CODE_FOR_fxu_roundf_suw4, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "trncf_sw4", CODE_FOR_fix_truncv4sfv4si2, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "trncf_suw4", CODE_FOR_fixuns_truncv4sfv4si2, FXU_V4SI_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "cvtf_sw4", CODE_FOR_fxu_cvtf_sw4, FXU_V4SI_V4SF, FXU_OP, VOIDmode, -1 },
+  { "cvtf_suw4", CODE_FOR_fxu_cvtf_suw4, FXU_V4SI_V4SF, FXU_OP, VOIDmode, -1 },
+  { "cvtf_ws4", CODE_FOR_floatv4siv4sf2, FXU_V4SF_V4SI, FXU_OP, VOIDmode, -1 },
+  { "cvtf_uws4", CODE_FOR_floatunsv4siv4sf2, FXU_V4SF_V4SI,
+    FXU_OP, VOIDmode, -1 },
+  { "cvtf_sh4", CODE_FOR_fxu_cvtf_sh4, FXU_V4SI_V4SF, FXU_OP, VOIDmode, -1 },
+  { "cvtf_hs4", CODE_FOR_fxu_cvtf_hs4, FXU_V4SF_V4SI, FXU_OP, VOIDmode, -1 },
+  { "cmpf_s4", CODE_FOR_fxu_cmpf, FXU_V4SI_V4SF_V4SF_INT,
+    FXU_OP, VOIDmode, 15 },
+  { "cmovf_w4", CODE_FOR_fxu_cmovfv4sf, FXU_V4SF_V4SI_V4SF_V4SF,
+    FXU_OP, VOIDmode, -1 },
+  { "cmovf_w4i", CODE_FOR_fxu_cmovfv4si, FXU_V4SI_V4SI_V4SI_V4SI,
+    FXU_OP, VOIDmode, -1 },
+  { "shflv_w4", CODE_FOR_fxu_shflvv4sf, FXU_V4SF_V4SF_V4SF_INT,
+    FXU_OP, VOIDmode, 4095 },
+  { "shflv_w4i", CODE_FOR_fxu_shflvv4si, FXU_V4SI_V4SI_V4SI_INT,
+    FXU_OP, VOIDmode, 4095 },
+  { "flpv_s4", CODE_FOR_fxu_flpv, FXU_V4SF_V4SF_INT, FXU_OP, VOIDmode, 3 },
+  { "trfsrv_w4", CODE_FOR_fxu_trfsrv, FXU_INT_V4SI_INT, FXU_OP, VOIDmode, 5 },
+  { "ldv_w", CODE_FOR_fxu_ldv_wv4sf, FXU_V4SF_V4SF_PCVOID_INT,
+    FXU_LOAD, SImode, 15 },
+  { "ldv_dw", CODE_FOR_fxu_ldv_dwv4sf, FXU_V4SF_V4SF_PCVOID_INT,
+    FXU_LOAD, DImode, 3 },
+  { "ldv_qw", CODE_FOR_nothing, FXU_V4SF_PCVOID, FXU_LOAD, V4SFmode, -1 },
+  { "ldvz_h4", CODE_FOR_fxu_ldvz_h4, FXU_V4SI_PCVOID, FXU_LOAD, DImode, -1 },
+  { "stv_w", CODE_FOR_fxu_stv_wv4sf, FXU_VOID_PVOID_V4SF_INT,
+    FXU_STORE, SImode, 3 },
+  { "stv_dw", CODE_FOR_fxu_stv_dwv4sf, FXU_VOID_PVOID_V4SF_INT,
+    FXU_STORE, DImode, 1 },
+  { "stv_qw", CODE_FOR_nothing, FXU_VOID_PVOID_V4SF, FXU_STORE, V4SFmode, -1 },
+  { "stvz_h4", CODE_FOR_fxu_stvz_h4, FXU_VOID_PVOID_V4SI,
+    FXU_STORE, DImode, -1 },
+};
+
+static GTY(()) tree v850_fxu_builtin_decls[ARRAY_SIZE (v850_fxu_builtins)];
+
+static tree
+v850_fxu_type (enum v850_fxu_ftype ftype)
+{
+  tree v4sf = build_vector_type (float_type_node, 4);
+  tree v4si = build_vector_type (intSI_type_node, 4);
+  tree pcvoid = build_pointer_type (build_qualified_type (void_type_node,
+							  TYPE_QUAL_CONST));
+  tree pvoid = ptr_type_node;
+  tree i = integer_type_node;
+
+  switch (ftype)
+    {
+    case FXU_V4SF_V4SF:
+      return build_function_type_list (v4sf, v4sf, NULL_TREE);
+    case FXU_V4SF_V4SF_V4SF:
+      return build_function_type_list (v4sf, v4sf, v4sf, NULL_TREE);
+    case FXU_V4SF_V4SF_V4SF_V4SF:
+      return build_function_type_list (v4sf, v4sf, v4sf, v4sf, NULL_TREE);
+    case FXU_V4SI_V4SF:
+      return build_function_type_list (v4si, v4sf, NULL_TREE);
+    case FXU_V4SF_V4SI:
+      return build_function_type_list (v4sf, v4si, NULL_TREE);
+    case FXU_V4SI_V4SF_V4SF_INT:
+      return build_function_type_list (v4si, v4sf, v4sf, i, NULL_TREE);
+    case FXU_V4SF_V4SI_V4SF_V4SF:
+      return build_function_type_list (v4sf, v4si, v4sf, v4sf, NULL_TREE);
+    case FXU_V4SI_V4SI_V4SI_V4SI:
+      return build_function_type_list (v4si, v4si, v4si, v4si, NULL_TREE);
+    case FXU_V4SF_V4SF_V4SF_INT:
+      return build_function_type_list (v4sf, v4sf, v4sf, i, NULL_TREE);
+    case FXU_V4SI_V4SI_V4SI_INT:
+      return build_function_type_list (v4si, v4si, v4si, i, NULL_TREE);
+    case FXU_V4SF_V4SF_INT:
+      return build_function_type_list (v4sf, v4sf, i, NULL_TREE);
+    case FXU_INT_V4SI_INT:
+      return build_function_type_list (i, v4si, i, NULL_TREE);
+    case FXU_V4SF_V4SF_PCVOID_INT:
+      return build_function_type_list (v4sf, v4sf, pcvoid, i, NULL_TREE);
+    case FXU_V4SF_PCVOID:
+      return build_function_type_list (v4sf, pcvoid, NULL_TREE);
+    case FXU_V4SI_PCVOID:
+      return build_function_type_list (v4si, pcvoid, NULL_TREE);
+    case FXU_VOID_PVOID_V4SF_INT:
+      return build_function_type_list (void_type_node, pvoid, v4sf, i,
+				       NULL_TREE);
+    case FXU_VOID_PVOID_V4SF:
+      return build_function_type_list (void_type_node, pvoid, v4sf, NULL_TREE);
+    case FXU_VOID_PVOID_V4SI:
+      return build_function_type_list (void_type_node, pvoid, v4si, NULL_TREE);
+    }
+  gcc_unreachable ();
+}
+
+/* Implement TARGET_INIT_BUILTINS.  */
+
+static void
+v850_init_builtins (void)
+{
+  if (! TARGET_FXU)
+    return;
+
+  for (unsigned int i = 0; i < ARRAY_SIZE (v850_fxu_builtins); i++)
+    {
+      char name[64];
+
+      snprintf (name, sizeof (name), "__builtin_v850_%s",
+		v850_fxu_builtins[i].name);
+      tree type = v850_fxu_type (v850_fxu_builtins[i].ftype);
+      v850_fxu_builtin_decls[i]
+	= add_builtin_function (name, type, i, BUILT_IN_MD, NULL, NULL_TREE);
+    }
+}
+
+/* Implement TARGET_BUILTIN_DECL.  */
+
+static tree
+v850_builtin_decl (unsigned int code, bool)
+{
+  if (code >= ARRAY_SIZE (v850_fxu_builtins))
+    return error_mark_node;
+  return v850_fxu_builtin_decls[code];
+}
+
+/* Return operand ARGNO of call EXP as a constant in [0, MAX].  */
+
+static rtx
+v850_fxu_imm (tree exp, int argno, int max)
+{
+  tree arg = CALL_EXPR_ARG (exp, argno);
+
+  if (TREE_CODE (arg) != INTEGER_CST
+      || ! IN_RANGE (TREE_INT_CST_LOW (arg), 0, max)
+      || ! tree_fits_uhwi_p (arg))
+    {
+      error_at (EXPR_LOCATION (exp),
+		"argument %d must be a constant in the range 0 to %d",
+		argno + 1, max);
+      return const0_rtx;
+    }
+  return GEN_INT (TREE_INT_CST_LOW (arg));
+}
+
+static rtx
+v850_fxu_vec (tree exp, int argno, machine_mode mode)
+{
+  rtx x = expand_normal (CALL_EXPR_ARG (exp, argno));
+
+  if (GET_MODE (x) != mode)
+    x = gen_lowpart (mode, force_reg (GET_MODE (x), x));
+  return force_reg (mode, x);
+}
+
+static rtx
+v850_fxu_mem (tree exp, int argno, machine_mode mode)
+{
+  rtx addr = force_reg (Pmode, expand_normal (CALL_EXPR_ARG (exp, argno)));
+  rtx mem = gen_rtx_MEM (mode, addr);
+
+  set_mem_align (mem, GET_MODE_BITSIZE (mode) >= 128 ? 128 : BITS_PER_WORD);
+  return mem;
+}
+
+/* Implement TARGET_EXPAND_BUILTIN.  */
+
+static rtx
+v850_expand_builtin (tree exp, rtx target, rtx, machine_mode, int)
+{
+  tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
+  const struct v850_fxu_builtin *b
+    = &v850_fxu_builtins[DECL_MD_FUNCTION_CODE (fndecl)];
+  int nargs = call_expr_nargs (exp);
+  machine_mode tmode = TYPE_MODE (TREE_TYPE (exp));
+  rtx ops[4];
+
+  if (b->kind == FXU_STORE)
+    {
+      rtx mem = v850_fxu_mem (exp, 0, b->mem_mode);
+      rtx v = v850_fxu_vec (exp, 1, b->ftype == FXU_VOID_PVOID_V4SI
+				    ? V4SImode : V4SFmode);
+      if (b->icode == CODE_FOR_nothing)
+	emit_move_insn (mem, v);
+      else if (nargs == 3)
+	emit_insn (GEN_FCN (b->icode) (mem, v, v850_fxu_imm (exp, 2,
+							   b->imm_max)));
+      else
+	emit_insn (GEN_FCN (b->icode) (mem, v));
+      return const0_rtx;
+    }
+
+  if (target == NULL_RTX || GET_MODE (target) != tmode
+      || ! register_operand (target, tmode))
+    target = gen_reg_rtx (tmode);
+
+  if (b->kind == FXU_LOAD)
+    {
+      if (b->icode == CODE_FOR_nothing)
+	emit_move_insn (target, v850_fxu_mem (exp, 0, b->mem_mode));
+      else if (nargs == 3)
+	{
+	  rtx v = v850_fxu_vec (exp, 0, tmode);
+	  rtx mem = v850_fxu_mem (exp, 1, b->mem_mode);
+	  emit_insn (GEN_FCN (b->icode) (target, v, mem,
+					 v850_fxu_imm (exp, 2, b->imm_max)));
+	}
+      else
+	emit_insn (GEN_FCN (b->icode) (target,
+				       v850_fxu_mem (exp, 0, b->mem_mode)));
+      return target;
+    }
+
+  for (int i = 0; i < nargs; i++)
+    {
+      const insn_operand_data *od = &insn_data[b->icode].operand[i + 1];
+
+      if (i == nargs - 1 && b->imm_max >= 0)
+	ops[i] = v850_fxu_imm (exp, i, b->imm_max);
+      else
+	ops[i] = v850_fxu_vec (exp, i, od->mode);
+    }
+
+  switch (nargs)
+    {
+    case 1:
+      emit_insn (GEN_FCN (b->icode) (target, ops[0]));
+      break;
+    case 2:
+      emit_insn (GEN_FCN (b->icode) (target, ops[0], ops[1]));
+      break;
+    case 3:
+      emit_insn (GEN_FCN (b->icode) (target, ops[0], ops[1], ops[2]));
+      break;
+    default:
+      gcc_unreachable ();
+    }
+  return target;
+}
+
 /* Initialize the GCC target structure.  */
 
 #undef  TARGET_OPTION_OVERRIDE
@@ -3323,6 +4930,55 @@ v850_can_inline_p (tree caller, tree callee)
 
 #undef  TARGET_HARD_REGNO_MODE_OK
 #define TARGET_HARD_REGNO_MODE_OK v850_hard_regno_mode_ok
+
+#undef  TARGET_HARD_REGNO_NREGS
+#define TARGET_HARD_REGNO_NREGS v850_hard_regno_nregs
+
+#undef  TARGET_CLASS_MAX_NREGS
+#define TARGET_CLASS_MAX_NREGS v850_class_max_nregs
+
+#undef  TARGET_CAN_CHANGE_MODE_CLASS
+#define TARGET_CAN_CHANGE_MODE_CLASS v850_can_change_mode_class
+
+#undef  TARGET_VECTORIZE_PREFERRED_SIMD_MODE
+#define TARGET_VECTORIZE_PREFERRED_SIMD_MODE v850_preferred_simd_mode
+
+#undef  TARGET_VECTORIZE_BUILTIN_VECTORIZATION_COST
+#define TARGET_VECTORIZE_BUILTIN_VECTORIZATION_COST \
+  v850_builtin_vectorization_cost
+
+#undef  TARGET_VECTORIZE_CREATE_COSTS
+#define TARGET_VECTORIZE_CREATE_COSTS v850_vectorize_create_costs
+
+#undef  TARGET_VECTORIZE_VEC_PERM_CONST
+#define TARGET_VECTORIZE_VEC_PERM_CONST v850_vectorize_vec_perm_const
+
+#undef  TARGET_VECTOR_MODE_SUPPORTED_P
+#define TARGET_VECTOR_MODE_SUPPORTED_P v850_vector_mode_supported_p
+
+#undef  TARGET_SECONDARY_MEMORY_NEEDED
+#define TARGET_SECONDARY_MEMORY_NEEDED v850_secondary_memory_needed
+
+#undef  TARGET_REGISTER_MOVE_COST
+#define TARGET_REGISTER_MOVE_COST v850_register_move_cost
+
+#undef  TARGET_MD_ASM_ADJUST
+#define TARGET_MD_ASM_ADJUST v850_md_asm_adjust
+
+#undef  TARGET_GET_DRAP_RTX
+#define TARGET_GET_DRAP_RTX v850_get_drap_rtx
+
+#undef  TARGET_UPDATE_STACK_BOUNDARY
+#define TARGET_UPDATE_STACK_BOUNDARY v850_update_stack_boundary
+
+#undef  TARGET_INIT_BUILTINS
+#define TARGET_INIT_BUILTINS v850_init_builtins
+
+#undef  TARGET_BUILTIN_DECL
+#define TARGET_BUILTIN_DECL v850_builtin_decl
+
+#undef  TARGET_EXPAND_BUILTIN
+#define TARGET_EXPAND_BUILTIN v850_expand_builtin
 
 #undef  TARGET_MODES_TIEABLE_P
 #define TARGET_MODES_TIEABLE_P v850_modes_tieable_p

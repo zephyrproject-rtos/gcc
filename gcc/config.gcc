@@ -586,6 +586,7 @@ sh[123456789lbe]*-*-* | sh-*-*)
 	;;
 v850*-*-*)
 	cpu_type=v850
+	extra_headers="v850_fxu.h"
 	;;
 tic6x-*-*)
 	cpu_type=c6x

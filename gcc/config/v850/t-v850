@@ -23,6 +23,19 @@ MULTILIB_DIRNAMES =  gcc-abi  soft-float
 MULTILIB_OPTIONS  += mv850e3v5
 MULTILIB_DIRNAMES +=  v850e3v5
 
+MULTILIB_OPTIONS  += mg4
+MULTILIB_DIRNAMES +=  g4
+MULTILIB_EXCEPTIONS = mg4 mgcc-abi/mg4 msoft-float/mg4 mgcc-abi/msoft-float/mg4
+
+MULTILIB_OPTIONS  += mfxu
+MULTILIB_DIRNAMES +=  fxu
+MULTILIB_EXCEPTIONS += mfxu mv850e3v5/mfxu mg4/mfxu mgcc-abi/mfxu
+MULTILIB_EXCEPTIONS += mgcc-abi/mv850e3v5/mfxu mgcc-abi/mg4/mfxu
+MULTILIB_EXCEPTIONS += msoft-float/mfxu msoft-float/mv850e3v5/mfxu
+MULTILIB_EXCEPTIONS += msoft-float/mg4/mfxu mgcc-abi/msoft-float/mfxu
+MULTILIB_EXCEPTIONS += mgcc-abi/msoft-float/mv850e3v5/mfxu
+MULTILIB_EXCEPTIONS += mgcc-abi/msoft-float/mg4/mfxu
+
 TCFLAGS = -mno-app-regs -msmall-sld -Wa,-mwarn-signed-overflow -Wa,-mwarn-unsigned-overflow
 
 v850-c.o: $(srcdir)/config/v850/v850-c.cc $(CONFIG_H) $(SYSTEM_H) coretypes.h \

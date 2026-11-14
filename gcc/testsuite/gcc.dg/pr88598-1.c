@@ -24,4 +24,4 @@ main ()
   return 0;
 }
 
-/* { dg-final { scan-tree-dump-not { \* } "ccp1" } } */
+/* { dg-final { scan-tree-dump-not { \* } "ccp1" { xfail v850_fxu } } } Xfail: PR114802 */

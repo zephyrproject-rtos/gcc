@@ -1418,6 +1418,9 @@ See RS/6000 and PowerPC Options.
 -mv850e2v3  -mv850e2  -mv850e1  -mv850es
 -mv850e  -mv850  -mv850e3v5
 -mloop
+-mg4
+-mg4mh2
+-mfxu
 -mrelax
 -mlong-jumps
 -msoft-float
@@ -34052,6 +34055,36 @@ Enables the use of the e3v5 LOOP instruction.  The use of this
 instruction is not enabled by default when the e3v5 architecture is
 selected because its use is still experimental.
 
+@opindex mg4
+@item -mg4
+Enables the instructions of the RH850 G4 cores (G4KH, G4MH) on top of
+the v850e3v5 architecture, and passes @option{-mg4} to the assembler.
+It implies @option{-mv850e3v5}.  The preprocessor constant
+@code{__V850_G4__} is defined if this option is used.
+
+@opindex mg4mh2
+@item -mg4mh2
+Enables the instructions of the RH850 G4MH2 core on top of
+@option{-mg4}, and passes @option{-mg4mh2} to the assembler.  It implies
+@option{-mg4}.  The preprocessor constant @code{__V850_G4MH2__} is
+defined if this option is used.  The G4MH2 core raises an exception on a
+misaligned access, so this option also enforces strict alignment and
+rejects @option{-mno-strict-align}.
+
+@opindex mfxu
+@item -mfxu
+Enables the FXU vector instructions of the RH850 G4MH2 core and passes
+@option{-mfxu} to the assembler.  It implies @option{-mg4mh2}.  The
+128-bit vector registers @code{wr0} to @code{wr31} hold the
+@code{vector_size (16)} types of @code{float} and 32-bit integers, which
+are 16-byte aligned.  The vector registers are preserved across calls.
+Vector arguments are passed in @code{wr0} to @code{wr31} and then on the
+stack, and vector return values in memory.  A function that keeps vector
+values on the stack aligns its frame to 16 bytes at run time.  The
+header @file{v850_fxu.h} declares the FXU types and intrinsics.  The
+preprocessor constant @code{__V850_FXU__} is defined if this option is
+used.
+
 @opindex mrh850-abi
 @opindex mghs
 @item -mrh850-abi
@@ -34078,6 +34111,11 @@ The @option{-m8byte-align} command-line option is supported.
 The @option{-mdisable-callt} command-line option is enabled by
 default.  The @option{-mno-disable-callt} command-line option is not
 supported.
+
+@item
+The @option{-mep} and @option{-mtda} command-line options and the
+@code{tda} variable attribute are not supported, because the ABI has no
+relocation for an offset from @code{ep}.
 @end itemize
 
 When this version of the ABI is enabled the C preprocessor symbol

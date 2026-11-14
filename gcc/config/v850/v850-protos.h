@@ -27,10 +27,23 @@ extern void   expand_epilogue               (void);
 extern int    v850_handle_pragma            (int (*)(void), void (*)(int), char *);
 extern int    compute_register_save_size    (long *);
 extern int    compute_frame_size            (poly_int64, long *);
+extern HOST_WIDE_INT v850_initial_elimination_offset (int, int);
 extern void   v850_init_expanders           (void);
 
 #ifdef RTX_CODE
 extern rtx    v850_return_addr              (int);
+extern bool v850_fxu_mem_p (rtx, int, bool);
+extern bool v850_expand_fxu_move (rtx, rtx);
+extern void v850_expand_fxu_misaligned_move (rtx, rtx);
+extern int v850_fxu_fcond (enum rtx_code, bool *, bool *);
+extern void v850_expand_fxu_vec_cmp (rtx, enum rtx_code, rtx, rtx);
+extern void v850_expand_fxu_vcond (rtx, rtx, rtx, enum rtx_code, rtx,
+				   rtx);
+extern void v850_expand_fxu_dup (rtx, rtx);
+extern void v850_expand_fxu_extract (rtx, rtx, int);
+extern void v850_expand_fxu_set (rtx, rtx, int);
+extern void v850_expand_fxu_init (rtx, rtx);
+extern void v850_expand_fxu_reduc (rtx, rtx, int);
 extern const char *output_move_single       (rtx *);
 extern char * construct_save_jarl           (rtx);
 extern char * construct_restore_jr          (rtx);
@@ -45,11 +58,17 @@ extern rtx    v850_gen_compare              (enum rtx_code, machine_mode,
 extern machine_mode  v850_gen_float_compare (enum rtx_code,
 						  machine_mode, rtx, rtx);
 extern machine_mode  v850_select_cc_mode (RTX_CODE, rtx, rtx);
+extern void v850_atomic_fence (rtx, bool);
 #endif
 #endif /* RTX_CODE */
 
 #ifdef TREE_CODE
 extern int    v850_interrupt_function_p     (tree);
+extern bool v850_interrupt_fe_p (tree);
+extern int v850_interrupt_state (void);
+extern int v850_interrupt_state_size (int);
+extern const char *v850_interrupt_return_insn (void);
+extern const char *v850_output_interrupt_state (int, bool);
 extern void   v850_output_aligned_bss       (FILE *, tree, const char *, unsigned HOST_WIDE_INT, int);
 extern void   v850_output_common            (FILE *, tree, const char *, int, int);
 extern void   v850_output_local             (FILE *, tree, const char *, int, int);
